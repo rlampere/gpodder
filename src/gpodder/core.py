@@ -30,6 +30,7 @@ class Core(object):
                  config_class=config.Config,
                  database_class=dbsqlite.Database,
                  model_class=model.Model):
+
         # Initialize the gPodder home directory
         util.make_directory(gpodder.home)
 

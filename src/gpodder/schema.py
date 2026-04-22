@@ -52,6 +52,8 @@ EpisodeColumns = (
     'description_html',
     'episode_art_url',
     'chapters',
+    'season_num',   #RobL
+    'episode_num',  #RobL
 )
 
 PodcastColumns = (
@@ -74,8 +76,7 @@ PodcastColumns = (
     'cover_thumb',
 )
 
-CURRENT_VERSION = 8
-
+CURRENT_VERSION = 9  #RobL -- Added season and episode numbers
 
 # SQL commands to upgrade old database versions to new ones
 # Each item is a tuple (old_version, new_version, sql_commands) that should be
@@ -123,7 +124,15 @@ UPGRADE_SQL = [
         ALTER TABLE episode ADD COLUMN chapters TEXT NULL DEFAULT NULL
         UPDATE podcast SET http_last_modified=NULL, http_etag=NULL
         """),
-]
+
+        #RobL--v
+        # Version 9: Add season and episode numbers
+        (8, 9, """
+        ALTER TABLE episode ADD COLUMN season_num INTEGER NOT NULL DEFAULT 0
+        ALTER TABLE episode ADD COLUMN episode_num INTEGER NOT NULL DEFAULT 0
+        """),
+        #RobL--^
+    ]
 
 
 def initialize_database(db):
@@ -160,6 +169,7 @@ def initialize_database(db):
         db.execute(sql)
 
     # Create table for episodes
+    #RobL--v Version 9: Added season_num and episode_num.
     db.execute("""
     CREATE TABLE episode (
         id INTEGER PRIMARY KEY NOT NULL,
@@ -184,6 +194,8 @@ def initialize_database(db):
         description_html TEXT NOT NULL DEFAULT '',
         episode_art_url TEXT NULL DEFAULT NULL,
         chapters TEXT NULL DEFAULT NULL
+        season_num INTEGER NOT NULL DEFAULT 0,
+        episode_num INTEGER NOT NULL DEFAULT 0
     )
     """)
 

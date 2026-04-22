@@ -35,6 +35,7 @@ import shutil
 import string
 import time
 import urllib.parse
+import datetime  #RobL
 
 import podcastparser
 
@@ -287,6 +288,8 @@ class PodcastEpisode(PodcastModelObject):
         episode.title = entry['title']
         episode.link = entry['link']
         episode.episode_art_url = entry.get('episode_art_url')
+        episode.season_num = entry.get('season_num', 0)    #RobL
+        episode.episode_num = entry.get('episode_num', 0)  #RobL
 
         # Only one of the two description fields should be set at a time.
         # This keeps the database from doubling in size and reduces load time from slow storage.
@@ -389,6 +392,8 @@ class PodcastEpisode(PodcastModelObject):
         self.published = 0
         self.download_filename = None
         self.payment_url = None
+        self.season_num = 0   #RobL
+        self.episode_num = 0  #RobL
 
         self.state = gpodder.STATE_NORMAL
         self.is_new = True
@@ -652,6 +657,40 @@ class PodcastEpisode(PodcastModelObject):
                     or self.download_filename == name):
                 return name
 
+    #RobL--v
+    def plex_season_value(self):
+        """Return season as 2 digits or publication year as 4 digits if season is missing.
+        """
+        if getattr(self, 'season_num', 0) and self.season_num > 0:
+            return f'{self.season_num:02d}'
+        if self.published:
+            dt = datetime.datetime.fromtimestamp(self.published)
+            return f'{dt.year:04d}'
+        return '0000'
+    #Robl--^
+
+    #RobL--v
+    def plex_episode_value(self):
+        """Return episode number as 2 digits or MMDD if episode number is missing.
+        """
+        if getattr(self, 'episode_num', 0) and self.episode_num > 0:
+            return f'{self.episode_num:02d}'
+        if self.published:
+            dt = datetime.datetime.fromtimestamp(self.published)
+            return f'{dt.month:02d}{dt.day:02d}'
+        return '0000'
+    #Robl--^
+
+    #RobL--v
+    def plex_file_basename(self):
+        """Create the file basename using the podcast name, season number, episode number
+        and episode title or a hash of the URL if the title is not available.
+        """
+        podcast_name = self.channel.title or self.channel.url or 'Podcast'
+        episode_title = self.title or hashlib.md5(self.url.encode('utf-8')).hexdigest()
+        return f'{podcast_name}-S{self.plex_season_value()}E{self.plex_episode_value()}-{episode_title}'
+    #Robl--^
+
     def local_filename(self, create, force_update=False, check_only=False,
             template=None, return_wanted_filename=False):
         """Get (and possibly generate) the local saving filename.
@@ -697,29 +736,36 @@ class PodcastEpisode(PodcastModelObject):
                         self.channel.url)
                 template = None
 
+            #RobL--v
             # Try to find a new filename for the current file
+            # Use template only for extension, not basename
             if template is not None:
                 # If template is specified, trust the template's extension
-                episode_filename, ext = os.path.splitext(template)
-            else:
-                episode_filename, _ = util.filename_from_url(self.url)
+                #episode_filename, ext = os.path.splitext(template)
+                _ignored_name, ext = os.path.splitext(template)
+            #else:
+                #episode_filename, _ = util.filename_from_url(self.url)
 
-            if 'redirect' in episode_filename and template is None:
+            # Build Plex-style file basename from metadata
+            episode_filename = self.plex_file_basename()
+
+            #if 'redirect' in episode_filename and template is None:
                 # This looks like a redirection URL - force URL resolving!
-                logger.warning('Looks like a redirection to me: %s', self.url)
-                url = util.get_real_url(self.channel.authenticate_url(self.url))
-                logger.info('Redirection resolved to: %s', url)
-                episode_filename, _ = util.filename_from_url(url)
+                #logger.warning('Looks like a redirection to me: %s', self.url)
+                #url = util.get_real_url(self.channel.authenticate_url(self.url))
+                #logger.info('Redirection resolved to: %s', url)
+                #episode_filename, _ = util.filename_from_url(url)
 
             # Use title for YouTube, Vimeo and Soundcloud downloads
-            if (youtube.is_video_link(self.url)
-                    or vimeo.is_video_link(self.url)
-                    or episode_filename == 'stream'):
-                episode_filename = self.title
+            #if (youtube.is_video_link(self.url)
+                    #or vimeo.is_video_link(self.url)
+                    #or episode_filename == 'stream'):
+                #episode_filename = self.title
 
-            # If the basename is empty, use the md5 hexdigest of the URL
-            if not episode_filename or episode_filename.startswith('redirect.'):
-                logger.error('Report this feed: Podcast %s, episode %s',
+            # If episode basename is empty for some reason, fall back to default md5 hexdigest of the URL
+            #if not episode_filename or episode_filename.startswith('redirect.'):
+            if not episode_filename:
+                logger.error('Invalid file basename - falling back to URL: Podcast %s, Episode %s',
                         self.channel.url, self.url)
                 episode_filename = hashlib.md5(self.url.encode('utf-8')).hexdigest()
 
@@ -729,8 +775,10 @@ class PodcastEpisode(PodcastModelObject):
                 ext,
                 self.MAX_FILENAME_LENGTH,
                 self.MAX_FILENAME_WITH_EXT_LENGTH)
+
             # Find a unique filename for this episode
             wanted_filename = self.find_unique_file_name(fn_template, ext)
+            #RobL--^
 
             if return_wanted_filename:
                 # return the calculated filename without updating the database
@@ -911,7 +959,8 @@ class PodcastEpisode(PodcastModelObject):
 
     def update_from(self, episode):
         for k in ('title', 'url', 'episode_art_url', 'description', 'description_html', 'chapters', 'link',
-                  'published', 'guid', 'payment_url'):
+                  'published', 'guid', 'payment_url',
+                  'season_num', 'episode_num'):  #RobL
             setattr(self, k, getattr(episode, k))
         # Don't overwrite file size on downloaded episodes
         # See #648 refreshing a youtube podcast clears downloaded file size
@@ -1175,6 +1224,8 @@ class PodcastChannel(PodcastModelObject):
                 self.title = self.title[len(VIMEO_PREFIX):] + ' on Vimeo'
             # End YouTube- and Vimeo-specific title FIX
 
+            self.rename(new_title)  #RobL - Rename podcast folder when title changes
+
     def _consume_metadata(self, title, link, description, cover_url,
             payment_url):
         self._consume_updated_title(title)
@@ -1394,12 +1445,16 @@ class PodcastChannel(PodcastModelObject):
 
     def rename(self, new_title):
         new_title = new_title.strip()
-        if self.title == new_title:
-            return
+        #RobL - deleted if self.title == new_title: return because we want to rename the folder
+        #RobL - even if the title is the same but the folder name is different (e.g. after sanitization)
 
         fn_template = util.sanitize_filename(new_title, self.MAX_FOLDERNAME_LENGTH)
 
         new_folder_name = self.find_unique_folder_name(fn_template)
+
+        if self.title == new_title and self.download_folder == new_folder_name:  #RobL
+            return                                                               #RobL
+
         if new_folder_name and new_folder_name != self.download_folder:
             new_folder = os.path.join(gpodder.downloads, new_folder_name)
             old_folder = os.path.join(gpodder.downloads, self.download_folder)
@@ -1410,8 +1465,7 @@ class PodcastChannel(PodcastModelObject):
                     os.rename(old_folder, new_folder)
                 else:
                     # Both folders exist -> move files and delete old folder
-                    logger.info('Moving files from %s to %s', old_folder,
-                            new_folder)
+                    logger.info('Moving files from %s to %s', old_folder, new_folder)
                     for file in glob.glob(os.path.join(old_folder, '*')):
                         shutil.move(file, new_folder)
                     logger.info('Removing %s', old_folder)

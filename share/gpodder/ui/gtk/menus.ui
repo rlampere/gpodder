@@ -306,12 +306,16 @@
     </section>
     <section>
       <item>
-        <attribute name="action">win.markEpisodesAsOld</attribute>
-        <attribute name="label" translatable="yes">Mark episodes as old</attribute>
+        <attribute name="action">win.markEpisodesAsOldNew</attribute>
+        <attribute name="label" translatable="yes">Mark episodes as old/new</attribute>
       </item>
       <item>
         <attribute name="action">win.channelAutoArchive</attribute>
         <attribute name="label" translatable="yes">Archive all episodes</attribute>
+      </item>
+      <item>
+        <attribute name="action">win.undeleteChannelEpisodes</attribute>
+        <attribute name="label" translatable="yes">Restore deleted episodes</attribute>
       </item>
       <item>
         <attribute name="action">win.refreshImage</attribute>

@@ -1,0 +1,207 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{87cb09f7-7aa5-4452-a433-52d1e0bec30d}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile>setup.py</StartupFile>
+    <SearchPath />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <ProjectTypeGuids>{888888a0-9f3d-457c-b088-3a5042f75d52}</ProjectTypeGuids>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <InterpreterId />
+    <SuppressConfigureTestFrameworkPrompt>true</SuppressConfigureTestFrameworkPrompt>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <PropertyGroup>
+    <VisualStudioVersion Condition=" '$(VisualStudioVersion)' == '' ">10.0</VisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="setup.py" />
+    <Compile Include="share\gpodder\examples\gpodder_mark_played.py" />
+    <Compile Include="share\gpodder\examples\hello_world.py" />
+    <Compile Include="share\gpodder\extensions\10_youtube-dl.py" />
+    <Compile Include="share\gpodder\extensions\20_audio_converter.py" />
+    <Compile Include="share\gpodder\extensions\20_video_converter.py" />
+    <Compile Include="share\gpodder\extensions\30_normalize_audio.py" />
+    <Compile Include="share\gpodder\extensions\30_rockbox_convert2mp4.py" />
+    <Compile Include="share\gpodder\extensions\40_rm_ogg_cover.py" />
+    <Compile Include="share\gpodder\extensions\50_tagging.py" />
+    <Compile Include="share\gpodder\extensions\80_rename_download.py" />
+    <Compile Include="share\gpodder\extensions\90_command_on_download.py" />
+    <Compile Include="share\gpodder\extensions\91_enqueue_in_mediaplayer.py" />
+    <Compile Include="share\gpodder\extensions\command_on_sync.py" />
+    <Compile Include="share\gpodder\extensions\concatenate_videos.py" />
+    <Compile Include="share\gpodder\extensions\episode_website_context_menu.py" />
+    <Compile Include="share\gpodder\extensions\filter.py" />
+    <Compile Include="share\gpodder\extensions\gtk_statusicon.py" />
+    <Compile Include="share\gpodder\extensions\minimize_on_start.py" />
+    <Compile Include="share\gpodder\extensions\mpris-listener.py" />
+    <Compile Include="share\gpodder\extensions\notification-win32.py" />
+    <Compile Include="share\gpodder\extensions\notification.py" />
+    <Compile Include="share\gpodder\extensions\podverse.py" />
+    <Compile Include="share\gpodder\extensions\rockbox_coverart.py" />
+    <Compile Include="share\gpodder\extensions\sonos.py" />
+    <Compile Include="share\gpodder\extensions\subscription_stats.py" />
+    <Compile Include="share\gpodder\extensions\taskbar_progress.py" />
+    <Compile Include="share\gpodder\extensions\ted_subtitles.py" />
+    <Compile Include="share\gpodder\extensions\ubuntu_appindicator.py" />
+    <Compile Include="share\gpodder\extensions\ubuntu_unity.py" />
+    <Compile Include="share\gpodder\extensions\update_feeds_on_startup.py" />
+    <Compile Include="src\gpodder\build_info.py" />
+    <Compile Include="src\gpodder\common.py" />
+    <Compile Include="src\gpodder\config.py" />
+    <Compile Include="src\gpodder\core.py" />
+    <Compile Include="src\gpodder\coverart.py" />
+    <Compile Include="src\gpodder\dbsqlite.py" />
+    <Compile Include="src\gpodder\dbusproxy.py" />
+    <Compile Include="src\gpodder\deviceplaylist.py" />
+    <Compile Include="src\gpodder\directory.py" />
+    <Compile Include="src\gpodder\download.py" />
+    <Compile Include="src\gpodder\extensions.py" />
+    <Compile Include="src\gpodder\feedcore.py" />
+    <Compile Include="src\gpodder\gtkui\app.py" />
+    <Compile Include="src\gpodder\gtkui\base.py" />
+    <Compile Include="src\gpodder\gtkui\config.py" />
+    <Compile Include="src\gpodder\gtkui\desktopfile.py" />
+    <Compile Include="src\gpodder\gtkui\desktop\channel.py" />
+    <Compile Include="src\gpodder\gtkui\desktop\episodeselector.py" />
+    <Compile Include="src\gpodder\gtkui\desktop\exportlocal.py" />
+    <Compile Include="src\gpodder\gtkui\desktop\podcastdirectory.py" />
+    <Compile Include="src\gpodder\gtkui\desktop\preferences.py" />
+    <Compile Include="src\gpodder\gtkui\desktop\welcome.py" />
+    <Compile Include="src\gpodder\gtkui\desktop\__init__.py" />
+    <Compile Include="src\gpodder\gtkui\download.py" />
+    <Compile Include="src\gpodder\gtkui\draw.py" />
+    <Compile Include="src\gpodder\gtkui\interface\addpodcast.py" />
+    <Compile Include="src\gpodder\gtkui\interface\common.py" />
+    <Compile Include="src\gpodder\gtkui\interface\configeditor.py" />
+    <Compile Include="src\gpodder\gtkui\interface\progress.py" />
+    <Compile Include="src\gpodder\gtkui\interface\searchtree.py" />
+    <Compile Include="src\gpodder\gtkui\interface\tagcloud.py" />
+    <Compile Include="src\gpodder\gtkui\interface\__init__.py" />
+    <Compile Include="src\gpodder\gtkui\macosx.py" />
+    <Compile Include="src\gpodder\gtkui\main.py" />
+    <Compile Include="src\gpodder\gtkui\model.py" />
+    <Compile Include="src\gpodder\gtkui\services.py" />
+    <Compile Include="src\gpodder\gtkui\shownotes.py" />
+    <Compile Include="src\gpodder\gtkui\widgets.py" />
+    <Compile Include="src\gpodder\gtkui\__init__.py" />
+    <Compile Include="src\gpodder\jsonconfig.py" />
+    <Compile Include="src\gpodder\libgpod_ctypes.py" />
+    <Compile Include="src\gpodder\log.py" />
+    <Compile Include="src\gpodder\minidb.py" />
+    <Compile Include="src\gpodder\model.py" />
+    <Compile Include="src\gpodder\my.py" />
+    <Compile Include="src\gpodder\opml.py" />
+    <Compile Include="src\gpodder\player.py" />
+    <Compile Include="src\gpodder\plugins\soundcloud.py" />
+    <Compile Include="src\gpodder\plugins\__init__.py" />
+    <Compile Include="src\gpodder\query.py" />
+    <Compile Include="src\gpodder\registry.py" />
+    <Compile Include="src\gpodder\schema.py" />
+    <Compile Include="src\gpodder\services.py" />
+    <Compile Include="src\gpodder\sync.py" />
+    <Compile Include="src\gpodder\syncui.py" />
+    <Compile Include="src\gpodder\util.py" />
+    <Compile Include="src\gpodder\utilwin32ctypes.py" />
+    <Compile Include="src\gpodder\utilwin32locale.py" />
+    <Compile Include="src\gpodder\vimeo.py" />
+    <Compile Include="src\gpodder\youtube.py" />
+    <Compile Include="src\gpodder\__init__.py" />
+    <Compile Include="tests\model.py" />
+    <Compile Include="tests\test_feedcore.py" />
+    <Compile Include="tests\__init__.py" />
+    <Compile Include="tools\create-desktop-icon.py" />
+    <Compile Include="tools\fake-dbus-module\dbus\exceptions.py" />
+    <Compile Include="tools\fake-dbus-module\dbus\glib.py" />
+    <Compile Include="tools\fake-dbus-module\dbus\mainloop.py" />
+    <Compile Include="tools\fake-dbus-module\dbus\mainloop\glib.py" />
+    <Compile Include="tools\fake-dbus-module\dbus\mainloop\__init__.py" />
+    <Compile Include="tools\fake-dbus-module\dbus\service.py" />
+    <Compile Include="tools\fake-dbus-module\dbus\__init__.py" />
+    <Compile Include="tools\getversion.py" />
+    <Compile Include="tools\github_release.py" />
+    <Compile Include="tools\mac-osx\launcher.py" />
+    <Compile Include="tools\mac-osx\make_cert_pem.py" />
+    <Compile Include="tools\progressbar_icon_tester.py" />
+    <Compile Include="tools\test-auth-server.py" />
+    <Compile Include="tools\win_installer\misc\create-launcher.py" />
+    <Compile Include="tools\win_installer\misc\depcheck.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="share\gpodder\images\directory-examples.png" />
+    <Content Include="share\gpodder\images\directory-gpodder.png" />
+    <Content Include="share\gpodder\images\directory-opml.png" />
+    <Content Include="share\gpodder\images\directory-podverse.png" />
+    <Content Include="share\gpodder\images\directory-soundcloud.png" />
+    <Content Include="share\gpodder\images\directory-tags.png" />
+    <Content Include="share\gpodder\images\directory-toplist.png" />
+    <Content Include="share\gpodder\images\directory-youtube.png" />
+    <Content Include="share\gpodder\images\podcast-0.png" />
+    <Content Include="share\gpodder\images\podcast-1.png" />
+    <Content Include="share\gpodder\images\podcast-2.png" />
+    <Content Include="share\gpodder\images\podcast-3.png" />
+    <Content Include="share\gpodder\images\podcast-4.png" />
+    <Content Include="share\gpodder\images\podcast-all.png" />
+    <Content Include="share\icons\hicolor\16x16\apps\gpodder.png" />
+    <Content Include="share\icons\hicolor\22x22\apps\gpodder.png" />
+    <Content Include="share\icons\hicolor\24x24\apps\gpodder.png" />
+    <Content Include="share\icons\hicolor\26x26\apps\gpodder.png" />
+    <Content Include="share\icons\hicolor\32x32\apps\gpodder.png" />
+    <Content Include="share\icons\hicolor\40x40\apps\gpodder.png" />
+    <Content Include="share\icons\hicolor\48x48\apps\gpodder.png" />
+    <Content Include="share\icons\hicolor\64x64\apps\gpodder.png" />
+    <Content Include="share\icons\hicolor\scalable\apps\gpodder.svg" />
+    <Content Include="tools\make-help.txt" />
+    <Content Include="tools\win_installer\misc\gpo.ico" />
+    <Content Include="tools\win_installer\misc\gpodder.ico" />
+    <Content Include="tools\win_installer\misc\gtk3.0_settings.ini" />
+    <Content Include="tools\win_installer\misc\README-PORTABLE.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="share\" />
+    <Folder Include="share\gpodder\" />
+    <Folder Include="share\gpodder\examples" />
+    <Folder Include="share\gpodder\extensions" />
+    <Folder Include="share\gpodder\images" />
+    <Folder Include="share\icons\" />
+    <Folder Include="share\icons\hicolor\" />
+    <Folder Include="share\icons\hicolor\16x16\" />
+    <Folder Include="share\icons\hicolor\16x16\apps" />
+    <Folder Include="share\icons\hicolor\22x22\" />
+    <Folder Include="share\icons\hicolor\22x22\apps" />
+    <Folder Include="share\icons\hicolor\24x24\" />
+    <Folder Include="share\icons\hicolor\24x24\apps" />
+    <Folder Include="share\icons\hicolor\26x26\" />
+    <Folder Include="share\icons\hicolor\26x26\apps" />
+    <Folder Include="share\icons\hicolor\32x32\" />
+    <Folder Include="share\icons\hicolor\32x32\apps" />
+    <Folder Include="share\icons\hicolor\40x40\" />
+    <Folder Include="share\icons\hicolor\40x40\apps" />
+    <Folder Include="share\icons\hicolor\48x48\" />
+    <Folder Include="share\icons\hicolor\48x48\apps" />
+    <Folder Include="share\icons\hicolor\64x64\" />
+    <Folder Include="share\icons\hicolor\64x64\apps" />
+    <Folder Include="share\icons\hicolor\scalable\" />
+    <Folder Include="share\icons\hicolor\scalable\apps" />
+    <Folder Include="src\" />
+    <Folder Include="src\gpodder" />
+    <Folder Include="src\gpodder\gtkui" />
+    <Folder Include="src\gpodder\gtkui\desktop" />
+    <Folder Include="src\gpodder\gtkui\interface" />
+    <Folder Include="src\gpodder\plugins" />
+    <Folder Include="tests" />
+    <Folder Include="tools" />
+    <Folder Include="tools\fake-dbus-module\" />
+    <Folder Include="tools\fake-dbus-module\dbus" />
+    <Folder Include="tools\fake-dbus-module\dbus\mainloop" />
+    <Folder Include="tools\mac-osx" />
+    <Folder Include="tools\win_installer\" />
+    <Folder Include="tools\win_installer\misc" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+</Project>

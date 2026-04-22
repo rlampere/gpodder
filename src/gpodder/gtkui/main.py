@@ -169,7 +169,7 @@ class gPodder(BuilderWidget):
         self._add_podcast_dialog = None
 
         self.default_title = None
-        self.set_title(_('gPodder'))
+        self.set_title(_('gPodder+'))  # RobL
 
         self.cover_downloader = CoverDownloader()
 
@@ -381,7 +381,8 @@ class gPodder(BuilderWidget):
             ('editChannel', self.on_itemEditChannel_activate),
             ('importFromFile', self.on_item_import_from_file_activate),
             ('exportChannels', self.on_itemExportChannels_activate),
-            ('markEpisodesAsOld', self.on_mark_episodes_as_old),
+            ('markEpisodesAsOldNew', self.on_mark_episodes_as_old_new),      #RobL
+            ('undeleteChannelEpisodes', self.on_undelete_channel_episodes),  #RobL
             ('refreshImage', self.on_itemRefreshCover_activate),
             # Episodes
             ('play', self.on_playback_selected_episodes),
@@ -724,6 +725,7 @@ class gPodder(BuilderWidget):
 
         # Set up channels context menu
         menu = self.application.builder.get_object('channels-context')
+
         # Extensions section, updated in signal handler
         extmenu = Gio.Menu()
         menu.insert_section(4, _('Extensions'), extmenu)
@@ -1809,15 +1811,67 @@ class gPodder(BuilderWidget):
             self.downloads_popover.show()
             return True
 
-    def on_mark_episodes_as_old(self, item, *args):
+    #RobL--v
+    # "Mark Episodes as Old" option was updated to "Mark Episodes as Old/New"
+    def on_mark_episodes_as_old_new(self, item, *args):
         assert self.active_channel is not None
 
-        for episode in self.active_channel.get_all_episodes():
-            if not episode.was_downloaded(and_exists=True):
-                episode.mark(is_played=True)
+        episodes = self.active_channel.get_all_episodes()
+
+        # Internal old/new toggle rules
+        # -----------------------------
+        # Option 1: Mark all episodes as old if there are any episodes that are new AND not downloaded.
+        # Otherwise mark all episodes as new.
+        #mark_as_old = any(
+        #    (not episode.was_downloaded(and_exists=True)) and episode.is_new
+        #    for episode in episodes
+        #)
+
+        # Option 2: Mark all episodes as old if there are ANY episodes that are new.
+        # Otherwise mark all episodes as new.
+        mark_as_old = any(episode.is_new for episode in episodes)
+
+        for episode in episodes:
+            if mark_as_old:
+                logger.warning('Marking %s - %s as OLD', self.active_channel.title, episode.title)
+                episode.is_new=False
+
+                # episode.mark(is_played=True) -- deprecated, as we want to keep the "played" state separate from the "new" state.
+                # This allows users to mark episodes as old without marking them as played, which is useful if they want to
+                # keep track of which episodes they've listened to, even if they don't want them to be marked as new anymore.
+
+                # To preserve old behavior: only mark undownloaded episodes old.
+                #if not episode.was_downloaded(and_exists=True):
+                #    episode.mark(is_played=True)
+            else:
+                logger.warning('Marking %s - %s as NEW', self.active_channel.title, episode.title)
+                # Mark as new -- this also undeletes deleted episodes.
+                episode.is_new=True
+
+                #episode.mark(is_played=False) -- deprecated, as we want to keep the "played" state separate from the "new" state.
+
+                # If the episode file exists, force filename regeneration so
+                # the file is renamed to match the Plex naming scheme
+                if episode.was_downloaded(and_exists=True):
+                    episode.local_filename(create=True, force_update=True)
 
         self.update_podcast_list_model(selected=True)
         self.update_episode_list_icons(update_all=True)
+    #RobL--^
+
+    #RobL--v
+    # Undelete episodes instead of marking them as played, if they were deleted before.
+    def on_undelete_channel_episodes(self, item, *args):
+        assert self.active_channel is not None
+
+        for episode in self.active_channel.get_all_episodes():
+            if episode.state == gpodder.STATE_DELETED:
+                #episode.mark(is_played=False)
+                episode.is_new=True
+
+        self.update_podcast_list_model(selected=True)
+        self.update_episode_list_icons(update_all=True)
+    #RobL--^
 
     def on_open_download_folder(self, item, *args):
         assert self.active_channel is not None

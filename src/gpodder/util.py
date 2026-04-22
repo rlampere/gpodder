@@ -157,41 +157,66 @@ def is_absolute_url(url):
     try:
         parsed = urllib.parse.urlparse(url)
         # fix #1190: when parsing a windows path, scheme=drive_letter, path=\rest_of_path
-        return parsed.scheme and not parsed.path.startswith("\\")
+        #return parsed.scheme and not parsed.path.startswith("\\")
+        return bool(parsed.scheme and len(parsed.scheme) > 1 and not parsed.path.startswith("\\")) #RobL
     except ValueError:
         return False
 
 
 def new_gio_file(path):
-    """Create a new Gio.File given a path or uri."""
+    """Create a new Gio.File given a path or uri.
+
+    Returns a Gio.File object.
+    """
     from gi.repository import Gio
 
     if is_absolute_url(path):
+        #print("> util.new_gio_file--is_absolute_url=true")    #RobL
+        #print(f">>                   path={path}")            #RobL
         return Gio.File.new_for_uri(path)
     else:
+        #print("> util.new_gio_file--is_absolute_url=false")   #RobL
+        #print(f">>                   path={path}")            #RobL
         return Gio.File.new_for_path(path)
 
 
 def make_directory(path):
     """Create a directory if it does not exist already.
 
-    Returns True if the directory exists after the function
-    call, False otherwise.
+    Returns True if the directory exists after the function call, False otherwise.
     """
     from gi.repository import Gio, GLib
 
+    # If the path is NOT a Gio.File, we assume it's a string and create a Gio.File from it.
     if not isinstance(path, Gio.File):
+        #print("> util.make_directory--NOT an instance of Gio.File -")       #RobL
+        #print(f">>                     path={path}")                        #RobL
         path = new_gio_file(path)
+    # If the path is a Gio.File, we can query its type to check if it exists and if it's a file or directory.
+    #else:                                                                   #RobL
+        #file_type = path.query_file_type(Gio.FileQueryInfoFlags.NONE, None) #RobL
+        #if file_type == Gio.FileType.DIRECTORY:                             #RobL
+        #    print("> util.make_directory--This is a directory.")            #RobL
+        #    print(f">>                     uri={path.get_uri()}")           #RobL
+        #elif file_type == Gio.FileType.REGULAR:                             #RobL
+        #    print("> util.make_directory--This is a regular file.")         #RobL
+        #    print(f">>                     uri={path.get_uri()}")           #RobL
 
+    # If the path already exists, we are done.
     if path.query_exists():
+        #print("> util.make_directory--path.query_exists = true")            #RobL
+        #print(f">>                     uri={path.get_uri()}")               #RobL
         return True
 
+    # If the path does NOT exists, we try to create it.
+    #print("> util.make_directory--path.query_exists = false")               #RobL
+    #print(f">>                     uri={path.get_uri()}")                   #RobL
     try:
         path.make_directory_with_parents()
     except GLib.Error as err:
         # The sync might be multithreaded, so directories can be created by other threads
         if not err.matches(Gio.io_error_quark(), Gio.IOErrorEnum.EXISTS):
-            logger.warning('Could not create directory %s: %s', path.get_uri(), err.message)
+            logger.warning('Could not CREATE directory : %s\n> path=%s\n< uri=%s', err.message, path.get_path(), path.get_uri()) #RobL
             return False
 
     return True
