@@ -1349,6 +1349,14 @@ class PodcastChannel(PodcastModelObject):
     def update(self, max_episodes=0):
         max_episodes = int(max_episodes)
         new_episodes = []
+
+        #RobL--v
+        # Manual podcasts are local database-only entries and do not have
+        # a real fetchable feed URL
+        if self.url and self.url.startswith('manual://'):
+            return new_episodes
+        #RobL--^
+
         try:
             result = self.feed_fetcher.fetch_channel(self, max_episodes)
 

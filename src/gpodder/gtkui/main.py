@@ -41,7 +41,9 @@ from gpodder.player import MyGPOClientObserver, PlayerInterface
 from gpodder.services import AutoRegisterObserver
 from gpodder.syncui import gPodderSyncUI
 
+
 from . import shownotes
+from .manual_entry import ManualEntryController  #RobL
 from .desktop.channel import gPodderChannel
 from .desktop.episodeselector import gPodderEpisodeSelector
 from .desktop.exportlocal import gPodderExportToLocalFolder
@@ -190,6 +192,7 @@ class gPodder(BuilderWidget):
         # For loading the list model
         self.episode_list_model = EpisodeListModel(self.on_episode_list_filter_changed)
 
+        self.manual_entry_controller = ManualEntryController(self)  #RobL
         self.create_actions()
 
         self.releasecell = None
@@ -412,6 +415,11 @@ class gPodder(BuilderWidget):
             action = Gio.SimpleAction.new(name, None)
             action.connect('activate', callback)
             g.add_action(action)
+
+        if hasattr(self, 'manual_entry_controller'):
+            self.manual_entry_controller.install_actions(g)  # RobL
+        else:
+            logger.warning('manual_entry_controller not available, skipping installation of its actions')
 
         # gPodder
         # Podcasts
@@ -3865,9 +3873,18 @@ class gPodder(BuilderWidget):
         selected_tasks, x, x, x, x, x = self.downloads_list_get_selection()
         self._for_each_task_set_status(selected_tasks, None, False)
 
+    #RobL--v
+    # Changed default behavior of double-clicking an episode in the episode list
+    # to start playback rather than show the shownotes. Playback can still be
+    # started by selecting the episode and pressing Enter or by clicking the
+    # play button in the toolbar.
     def on_treeAvailable_row_activated(self, widget, path, view_column):
         """Double-click/enter action handler for treeAvailable."""
-        self.on_shownotes_selected_episodes(widget)
+        #self.on_shownotes_selected_episodes(widget)
+        widget.grab_focus()
+        widget.set_cursor(path, view_column, False)
+        self.on_playback_selected_episodes(widget)
+    #RobL--^
 
     def restart_auto_update_timer(self):
         if self._auto_update_timer_source_id is not None:

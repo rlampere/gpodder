@@ -89,6 +89,14 @@
           <attribute name="label" translatable="yes">Update podcast</attribute>
         </item>
         <item>
+          <attribute name="action">win.manualEntryManager</attribute>
+          <attribute name="label" translatable="yes">Add podcast manually</attribute>
+        </item>
+        <item>
+          <attribute name="action">win.manualEditPodcast</attribute>
+          <attribute name="label" translatable="yes">Edit selected podcast</attribute>
+        </item>
+        <item>
           <attribute name="action">win.editChannel</attribute>
           <attribute name="label" translatable="yes">Podcast settings</attribute>
         </item>
@@ -297,6 +305,14 @@
         <attribute name="action">win.removeChannel</attribute>
         <attribute name="label" translatable="yes">Delete channel</attribute>
       </item>
+      <item>
+        <attribute name="action">win.manualAddEpisode</attribute>
+        <attribute name="label" translatable="yes">Add episode manually</attribute>
+      </item>
+      <item>
+        <attribute name="action">win.manualEditPodcast</attribute>
+        <attribute name="label" translatable="yes">Edit selected podcast</attribute>
+      </item>
     </section>
     <section>
       <item>
@@ -372,6 +388,10 @@
       </item>
     </section>
     <section>
+      <item>
+        <attribute name="action">win.manualEditEpisode</attribute>
+        <attribute name="label" translatable="yes">Edit selected episode</attribute>
+      </item>
       <item>
         <attribute name="action">win.toggleShownotes</attribute>
         <attribute name="label" translatable="yes">Episode details</attribute>

@@ -65,7 +65,7 @@ defaults = {
             'concurrent': 1,
             'concurrent_max': 16,
         },
-        'episodes': 200,  # max episodes per feed
+        'episodes': 0,  # 0 = unlimited episodes per feed  #RobL - Increased from 200
     },
 
     # Behavior of downloads

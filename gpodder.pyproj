@@ -85,6 +85,7 @@
     <Compile Include="src\gpodder\gtkui\interface\__init__.py" />
     <Compile Include="src\gpodder\gtkui\macosx.py" />
     <Compile Include="src\gpodder\gtkui\main.py" />
+    <Compile Include="src\gpodder\gtkui\manual_entry.py" />
     <Compile Include="src\gpodder\gtkui\model.py" />
     <Compile Include="src\gpodder\gtkui\services.py" />
     <Compile Include="src\gpodder\gtkui\shownotes.py" />
@@ -133,6 +134,11 @@
     <Compile Include="tools\win_installer\misc\depcheck.py" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="share\applications\gpodder-url-handler.desktop.in" />
+    <Content Include="share\applications\gpodder.desktop.in" />
+    <Content Include="share\dbus-1\services\org.gpodder.service.in" />
+    <Content Include="share\gpodder\extensions\__pycache__\notification-win32.cpython-314.pyc" />
+    <Content Include="share\gpodder\extensions\__pycache__\notification.cpython-314.pyc" />
     <Content Include="share\gpodder\images\directory-examples.png" />
     <Content Include="share\gpodder\images\directory-gpodder.png" />
     <Content Include="share\gpodder\images\directory-opml.png" />
@@ -147,6 +153,16 @@
     <Content Include="share\gpodder\images\podcast-3.png" />
     <Content Include="share\gpodder\images\podcast-4.png" />
     <Content Include="share\gpodder\images\podcast-all.png" />
+    <Content Include="share\gpodder\ui\gtk\gpodder.ui" />
+    <Content Include="share\gpodder\ui\gtk\gpodderaddpodcast.ui" />
+    <Content Include="share\gpodder\ui\gtk\gpodderchannel.ui" />
+    <Content Include="share\gpodder\ui\gtk\gpodderconfigeditor.ui" />
+    <Content Include="share\gpodder\ui\gtk\gpodderepisodeselector.ui" />
+    <Content Include="share\gpodder\ui\gtk\gpodderexporttolocalfolder.ui" />
+    <Content Include="share\gpodder\ui\gtk\gpodderpodcastdirectory.ui" />
+    <Content Include="share\gpodder\ui\gtk\gpodderpreferences.ui" />
+    <Content Include="share\gpodder\ui\gtk\gpodderwelcome.ui" />
+    <Content Include="share\gpodder\ui\gtk\menus.ui" />
     <Content Include="share\icons\hicolor\16x16\apps\gpodder.png" />
     <Content Include="share\icons\hicolor\22x22\apps\gpodder.png" />
     <Content Include="share\icons\hicolor\24x24\apps\gpodder.png" />
@@ -156,6 +172,10 @@
     <Content Include="share\icons\hicolor\48x48\apps\gpodder.png" />
     <Content Include="share\icons\hicolor\64x64\apps\gpodder.png" />
     <Content Include="share\icons\hicolor\scalable\apps\gpodder.svg" />
+    <Content Include="share\man\man1\gpo.1" />
+    <Content Include="share\man\man1\gpodder-migrate2tres.1" />
+    <Content Include="share\man\man1\gpodder.1" />
+    <Content Include="share\metainfo\org.gpodder.gpodder.appdata.xml" />
     <Content Include="tools\make-help.txt" />
     <Content Include="tools\win_installer\misc\gpo.ico" />
     <Content Include="tools\win_installer\misc\gpodder.ico" />
@@ -164,10 +184,16 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="share\" />
+    <Folder Include="share\applications\" />
+    <Folder Include="share\dbus-1\" />
+    <Folder Include="share\dbus-1\services\" />
     <Folder Include="share\gpodder\" />
     <Folder Include="share\gpodder\examples" />
     <Folder Include="share\gpodder\extensions" />
+    <Folder Include="share\gpodder\extensions\__pycache__\" />
     <Folder Include="share\gpodder\images" />
+    <Folder Include="share\gpodder\ui\" />
+    <Folder Include="share\gpodder\ui\gtk\" />
     <Folder Include="share\icons\" />
     <Folder Include="share\icons\hicolor\" />
     <Folder Include="share\icons\hicolor\16x16\" />
@@ -188,6 +214,9 @@
     <Folder Include="share\icons\hicolor\64x64\apps" />
     <Folder Include="share\icons\hicolor\scalable\" />
     <Folder Include="share\icons\hicolor\scalable\apps" />
+    <Folder Include="share\man\" />
+    <Folder Include="share\man\man1\" />
+    <Folder Include="share\metainfo\" />
     <Folder Include="src\" />
     <Folder Include="src\gpodder" />
     <Folder Include="src\gpodder\gtkui" />
