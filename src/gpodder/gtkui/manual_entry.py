@@ -71,6 +71,16 @@ if gi.Repository.get_default().enumerate_versions('Gst') and gi.Repository.get_d
     Gst.init(None)
     _GST_TAGS_AVAILABLE = True
 
+_GST_TAGS_AVAILABLE = False
+_gst_versions = set(gi.Repository.get_default().enumerate_versions('Gst'))
+_gst_pbutils_versions = set(gi.Repository.get_default().enumerate_versions('GstPbutils'))
+if '1.0' in _gst_versions and '1.0' in _gst_pbutils_versions:
+    gi.require_version('Gst', '1.0')  # isort:skip
+    gi.require_version('GstPbutils', '1.0')  # isort:skip
+    from gi.repository import Gst, GstPbutils  # isort:skip
+    Gst.init(None)
+    _GST_TAGS_AVAILABLE = True
+
 _ = gpodder.gettext
 Gst.init(None)
 
@@ -613,12 +623,14 @@ class ManualEntryController(object):
             Gio.FileQueryInfoFlags.NONE,
             None,
         )
-        discoverer = GstPbutils.Discoverer.new(5 * Gst.SECOND)
-        media_info = discoverer.discover_uri(source.as_uri())
-        tags = media_info.get_tags() if media_info is not None else None
+        tags = None
+        if _GST_TAGS_AVAILABLE:
+            discoverer = GstPbutils.Discoverer.new(5 * Gst.SECOND)
+            media_info = discoverer.discover_uri(source.as_uri())
+            tags = media_info.get_tags() if media_info is not None else None
 
-        title = self._get_tag_string(tags, Gst.TAG_TITLE) or source.stem
-        description = self._get_tag_string(tags, Gst.TAG_COMMENT) or ''
+        title = self._get_tag_string(tags, 'title') or source.stem
+        description = self._get_tag_string(tags, 'comment') or ''
         modified = info.get_attribute_uint64(Gio.FILE_ATTRIBUTE_TIME_MODIFIED)
         return {
             'title': (title or '').strip(),
