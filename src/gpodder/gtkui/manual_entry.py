@@ -73,6 +73,7 @@ if '1.0' in _gst_versions and '1.0' in _gst_pbutils_versions:
     _GST_TAGS_AVAILABLE = True
 
 _ = gpodder.gettext
+Gst.init(None)
 
 
 class ManualEntryError(Exception):
