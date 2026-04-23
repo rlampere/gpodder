@@ -59,7 +59,17 @@ from gpodder.model import Model
 import gi  # isort:skip
 
 gi.require_version('Gtk', '3.0')  # isort:skip
-from gi.repository import Gio, Gtk  # isort:skip
+gi.require_version('Gst', '1.0')  # isort:skip
+gi.require_version('GstPbutils', '1.0')  # isort:skip
+from gi.repository import Gio, Gst, GstPbutils, Gtk  # isort:skip
+
+_GST_TAGS_AVAILABLE = False
+if gi.Repository.get_default().enumerate_versions('Gst') and gi.Repository.get_default().enumerate_versions('GstPbutils'):
+    gi.require_version('Gst', '1.0')  # isort:skip
+    gi.require_version('GstPbutils', '1.0')  # isort:skip
+    from gi.repository import Gst, GstPbutils  # isort:skip
+    Gst.init(None)
+    _GST_TAGS_AVAILABLE = True
 
 _GST_TAGS_AVAILABLE = False
 _gst_versions = set(gi.Repository.get_default().enumerate_versions('Gst'))
@@ -72,6 +82,7 @@ if '1.0' in _gst_versions and '1.0' in _gst_pbutils_versions:
     _GST_TAGS_AVAILABLE = True
 
 _ = gpodder.gettext
+Gst.init(None)
 
 
 class ManualEntryError(Exception):
