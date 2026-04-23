@@ -24,8 +24,12 @@
         <attribute name="action">app.logs</attribute>
       </item>
       <item>
-        <attribute name="label" translatable="yes">Help</attribute>
-        <attribute name="action">app.help</attribute>
+        <attribute name="label" translatable="yes">Help (online)</attribute>
+        <attribute name="action">app.helpOnline</attribute>
+      </item>
+      <item>
+          <attribute name="label" translatable="yes">Help (local)</attribute>
+          <attribute name="action">app.helpLocal</attribute>
       </item>
       <item>
         <attribute name="action">app.about</attribute>

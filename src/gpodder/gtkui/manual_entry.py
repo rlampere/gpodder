@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+#RobL--v manual_entry.py is a new gPodder module added by RobL & created by ChatGPT
 """
 Manual podcast/episode add + edit support for gPodder GTK.
 

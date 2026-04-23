@@ -5,8 +5,8 @@
   <requires lib="gtk+" version="3.16"/>
   <object class="GtkAdjustment" id="adjustment_episode_limit">
     <property name="lower">100</property>
-    <property name="upper">1000000</property>
-    <property name="value">0</property>
+    <property name="upper">9999</property>
+    <property name="value">9999</property>
     <property name="step-increment">10</property>
     <property name="page-increment">100</property>
   </object>
@@ -703,9 +703,9 @@
                                         <property name="visible">True</property>
                                         <property name="can-focus">True</property>
                                         <property name="halign">center</property>
-                                        <property name="text">200</property>
+                                        <property name="text">9999</property>
                                         <property name="adjustment">adjustment_episode_limit</property>
-                                        <property name="value">200</property>
+                                        <property name="value">9999</property>
                                       </object>
                                     </child>
                                   </object>

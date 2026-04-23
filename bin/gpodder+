@@ -1,0 +1,166 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+#RobL--v
+#===============================================================================
+# gPodder+ Launcher
+# -----------------
+# gPodder+ is a fork of gPodder, an open-source media aggregator and podcast
+# client. This fork is focused on modernizing the user interface and improving
+# the user experience while maintaining the core functionality of gPodder.
+#
+# gPodder+ adds new features including:
+# 1. Plex-style file naming for better organization of downloaded media.
+# 2. Ability to manually add podcasts and episodes.
+# 3. Ability to edit podcast and episode metadata.
+# 4. Addition of a local PDF help document.
+#===============================================================================
+#RobL--^
+
+#
+# gPodder - A media aggregator and podcast client
+# Copyright (c) 2005-2018 The gPodder Team
+#
+# gPodder is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# gPodder is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+"""
+gPodder enables you to subscribe to media feeds (RSS, Atom, YouTube,
+Soundcloud and Vimeo) and automatically download new content.
+
+This is the gPodder GUI. See gpo(1) for the command-line interface.
+"""
+
+import gettext
+import logging
+import os
+import os.path
+import platform
+import subprocess
+import sys
+from optparse import OptionGroup, OptionParser
+
+logger = logging.getLogger(__name__)
+
+
+def main():
+    # Paths to important files
+    gpodder_script = sys.argv[0]
+    gpodder_script = os.path.realpath(gpodder_script)
+    gpodder_dir = os.path.join(os.path.dirname(gpodder_script), '..')
+    prefix = os.path.abspath(os.path.normpath(gpodder_dir))
+    help_file = os.path.join(prefix, 'doc', 'gPodder+_User_Manual.pdf')  #RobL
+
+    src_dir = os.path.join(prefix, 'src')
+    locale_dir = os.path.join(prefix, 'share', 'locale')
+    ui_folder = os.path.join(prefix, 'share', 'gpodder', 'ui')
+    images_folder = os.path.join(prefix, 'share', 'gpodder', 'images')
+    icon_file = os.path.join(prefix, 'share', 'icons', 'hicolor', 'scalable', 'apps', 'gpodder+.svg')  #RobL
+
+    if os.path.exists(os.path.join(src_dir, 'gpodder', '__init__.py')):
+        # Run gPodder from local source folder (not installed)
+        sys.path.insert(0, src_dir)
+
+    # on Mac OS X, read from the defaults database the locale of the user
+    if platform.system() == 'Darwin' and 'LANG' not in os.environ:
+        locale_cmd = ('defaults', 'read', 'NSGlobalDomain', 'AppleLocale')
+        process = subprocess.Popen(locale_cmd, stdout=subprocess.PIPE)
+        output, error_output = process.communicate()
+        # the output is a string like 'fr_FR', and we need 'fr_FR.utf-8'
+        user_locale = output.decode('utf-8').strip() + '.UTF-8'
+        os.environ['LANG'] = user_locale
+        print('Setting locale to', user_locale, file=sys.stderr)
+
+    # Set up the path to translation files
+    gettext.bindtextdomain('gpodder', locale_dir)
+
+    import gpodder  # isort:skip
+
+    gpodder.prefix = prefix
+    gpodder.help_file = help_file  #RobL
+
+    # Package managers can install the empty file {prefix}/share/gpodder/no-update-check to disable update checks
+    gpodder.no_update_check_file = os.path.join(prefix, 'share', 'gpodder', 'no-update-check')
+
+    # Enable i18n for gPodder translations
+    _ = gpodder.gettext
+
+    # Set up paths to folder with GtkBuilder files and gpodder.svg
+    gpodder.ui_folders.append(ui_folder)
+    gpodder.images_folder = images_folder
+    gpodder.icon_file = icon_file
+
+    s_usage = 'usage: %%prog [options]\n\n%s' % (__doc__.strip())
+    s_version = '%%prog %s' % (gpodder.__version__)
+
+    parser = OptionParser(usage=s_usage, version=s_version)
+
+    grp_subscriptions = OptionGroup(parser, "Subscriptions")
+    parser.add_option_group(grp_subscriptions)
+
+    grp_subscriptions.add_option('-s', '--subscribe', dest='subscribe',
+                                 metavar='URL',
+                                 help=_('subscribe to the feed at URL'))
+
+    grp_logging = OptionGroup(parser, "Logging")
+    parser.add_option_group(grp_logging)
+
+    grp_logging.add_option("-v", "--verbose",
+                           action="store_true", dest="verbose", default=False,
+                           help=_("print logging output on the console"))
+
+    grp_logging.add_option("-q", "--quiet",
+                           action="store_true", dest="quiet", default=False,
+                           help=_("reduce warnings on the console"))
+
+    grp_advanced = OptionGroup(parser, "Advanced")
+    parser.add_option_group(grp_advanced)
+
+    grp_advanced.add_option("--close-after-startup", action="store_true",
+                            help=_("exit once started up (for profiling)"))
+
+    # On Mac OS X, support the "psn" parameter for compatibility (bug 939)
+    if gpodder.ui.osx:
+        grp_advanced.add_option('-p', '--psn', dest='macpsn', metavar='PSN',
+                                help=_('Mac OS X application process number'))
+
+    options, args = parser.parse_args(sys.argv)
+
+    gpodder.ui.gtk = True
+    gpodder.ui.python3 = True
+
+    desktop_session = os.environ.get('DESKTOP_SESSION', 'unknown').lower()
+    xdg_current_desktop = os.environ.get('XDG_CURRENT_DESKTOP', 'unknown').lower()
+    gpodder.ui.unity = (desktop_session in ('ubuntu', 'ubuntu-2d', 'unity')
+                        and xdg_current_desktop in ('unity', 'unity:unity7:ubuntu'))
+
+    from gpodder import log
+    log.setup(options.verbose, options.quiet)
+
+    if (not (gpodder.ui.win32 or gpodder.ui.osx)
+            and os.environ.get('DISPLAY', '') == ''
+            and os.environ.get('WAYLAND_DISPLAY', '') == ''):
+        logger.error('Cannot start gPodder: $DISPLAY or $WAYLAND_DISPLAY is not set.')
+        sys.exit(1)
+
+    if gpodder.ui.gtk:
+        from gpodder.gtkui import app
+        gpodder.ui_folders.insert(0, os.path.join(ui_folder, 'gtk'))
+        app.main(options)
+    else:
+        logger.error('No GUI selected.')
+
+
+if __name__ == '__main__':
+    main()

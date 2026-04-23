@@ -98,9 +98,13 @@ class gPodderApplication(Gtk.Application):
         action.connect('activate', self.on_quit)
         self.add_action(action)
 
-        action = Gio.SimpleAction.new('help', None)
-        action.connect('activate', self.on_help_activate)
-        self.add_action(action)
+        action = Gio.SimpleAction.new('helpOnline', None)         #RobL
+        action.connect('activate', self.on_help_online_activate)  #RobL
+        self.add_action(action)                                   #RobL
+
+        action = Gio.SimpleAction.new('helpLocal', None)          #RobL
+        action.connect('activate', self.on_help_local_activate)   #RobL
+        self.add_action(action)                                   #RobL
 
         action = Gio.SimpleAction.new('logs', None)
         action.connect('activate', self.on_logs_activate)
@@ -305,7 +309,7 @@ class gPodderApplication(Gtk.Application):
         self.menu_popover.popup()
 
     def on_about(self, action, param):
-        dlg = Gtk.Dialog(_('About gPodder'), self.window.gPodder,
+        dlg = Gtk.Dialog(_('About gPodder+'), self.window.gPodder,
                 Gtk.DialogFlags.MODAL)
         dlg.add_button(_('_Close'), Gtk.ResponseType.OK).show()
         dlg.set_resizable(True)
@@ -316,7 +320,7 @@ class gPodderApplication(Gtk.Application):
         label = Gtk.Label(justify=Gtk.Justification.CENTER)
         label.set_selectable(True)
         label.set_markup('\n'.join(x.strip() for x in """
-        <b>gPodder {version} ({date})</b>
+        <b>gPodder+ {version} ({date})</b>
 
         {copyright}
 
@@ -352,8 +356,21 @@ class gPodderApplication(Gtk.Application):
             self.owner_id = None
         self.quit()
 
-    def on_help_activate(self, action, param):
-        util.open_website('https://gpodder.github.io/docs/')
+    def on_help_online_activate(self, action, param):         #RobL
+        util.open_website('https://gpodder.github.io/docs/')  #RobL
+
+    #RobL--v
+    # Open the PDF help file if it exists, otherwise show an error dialog.
+    def on_help_local_activate(self, action, param):
+        if os.path.exists(gpodder.help_file):
+            util.gui_open(gpodder.help_file, gui=self.window)
+        else:
+            self.window.show_message(
+                _('Expected PDF help file was not found:\n%s') % gpodder.help_file,
+                _('Help File Not Found'),
+                important=True
+            )
+    #RobL--^
 
     def on_logs_activate(self, action, param):
         util.gui_open(os.path.join(gpodder.home, 'Logs'), gui=self.window)
@@ -374,10 +391,11 @@ class gPodderApplication(Gtk.Application):
         self.window.mygpo_client.open_website()
 
     def on_check_for_updates_activate(self, action, param):
-        if os.path.exists(gpodder.no_update_check_file):
-            self.window.check_for_distro_updates()
-        else:
-            self.window.check_for_updates(silent=False)
+        #if os.path.exists(gpodder.no_update_check_file):
+        #    self.window.check_for_distro_updates()
+        #else:
+        #    self.window.check_for_updates(silent=False)
+        self.window.show_message('Software updates are disabled to avoid issues with gPodder+ modifications') #RobL
 
     def on_subscribe_to_url_activate(self, action, param):
         self.window.subscribe_to_url(param.get_string())

@@ -19,10 +19,10 @@
 
 # This metadata block gets parsed by setup.py and pyproject.toml - use single quotes only
 __tagline__ = 'Media aggregator and podcast client'
-__author__ = 'Thomas Perl <thp@gpodder.org> (updated by RobL)'  #RobL
-__version__ = '4.0.0'                                           #RobL - Previous Version 3.11.5'
-__date__ = '2026-04-22'                                         #RobL - Previous Date 2024-12-17
-__copyright__ = '© 2005-2024 The gPodder Team'
+__author__ = 'Thomas Perl <thp@gpodder.org> (with mods by RobL)'  #RobL
+__version__ = '4.0.0'                                             #RobL - Previous Version 3.11.5'
+__date__ = '2026-04-22'                                           #RobL - Previous Date 2024-12-17
+__copyright__ = '© 2005-2024 The gPodder Team (+ RobL mods)'      #RobL
 __license__ = 'GNU General Public License, version 3 or later'
 __url__ = 'http://gpodder.org/'
 
@@ -35,6 +35,7 @@ import gettext
 import locale
 import os
 import platform
+from pydoc import Helper
 import socket
 import sys
 
@@ -156,6 +157,7 @@ config_file = None
 database_file = None
 downloads = None
 prefix = None
+help_file = None  #RobL
 
 ENV_HOME, ENV_DOWNLOADS = 'GPODDER_HOME', 'GPODDER_DOWNLOAD_DIR'
 
@@ -171,7 +173,6 @@ def set_home(new_home):
     database_file = os.path.join(home, 'Database')
     if ENV_DOWNLOADS not in os.environ:
         downloads = os.path.join(home, 'Downloads')
-
 
 def fixup_home(old_home):
     if ui.osx or ui.win32:
