@@ -59,21 +59,12 @@ from gpodder.model import Model
 import gi  # isort:skip
 
 gi.require_version('Gtk', '3.0')  # isort:skip
-gi.require_version('Gst', '1.0')  # isort:skip
-gi.require_version('GstPbutils', '1.0')  # isort:skip
-from gi.repository import Gio, Gst, GstPbutils, Gtk  # isort:skip
+from gi.repository import GLib, Gio, Gtk  # isort:skip
 
 _GST_TAGS_AVAILABLE = False
-if gi.Repository.get_default().enumerate_versions('Gst') and gi.Repository.get_default().enumerate_versions('GstPbutils'):
-    gi.require_version('Gst', '1.0')  # isort:skip
-    gi.require_version('GstPbutils', '1.0')  # isort:skip
-    from gi.repository import Gst, GstPbutils  # isort:skip
-    Gst.init(None)
-    _GST_TAGS_AVAILABLE = True
-
-_GST_TAGS_AVAILABLE = False
-_gst_versions = set(gi.Repository.get_default().enumerate_versions('Gst'))
-_gst_pbutils_versions = set(gi.Repository.get_default().enumerate_versions('GstPbutils'))
+_gi_repository = gi.Repository.get_default()
+_gst_versions = set(_gi_repository.enumerate_versions('Gst'))
+_gst_pbutils_versions = set(_gi_repository.enumerate_versions('GstPbutils'))
 if '1.0' in _gst_versions and '1.0' in _gst_pbutils_versions:
     gi.require_version('Gst', '1.0')  # isort:skip
     gi.require_version('GstPbutils', '1.0')  # isort:skip
@@ -626,7 +617,10 @@ class ManualEntryController(object):
         tags = None
         if _GST_TAGS_AVAILABLE:
             discoverer = GstPbutils.Discoverer.new(5 * Gst.SECOND)
-            media_info = discoverer.discover_uri(source.as_uri())
+            try:
+                media_info = discoverer.discover_uri(source.as_uri())
+            except GLib.Error:
+                media_info = None
             tags = media_info.get_tags() if media_info is not None else None
 
         title = self._get_tag_string(tags, 'title') or source.stem
