@@ -59,7 +59,18 @@ from gpodder.model import Model
 import gi  # isort:skip
 
 gi.require_version('Gtk', '3.0')  # isort:skip
-from gi.repository import Gio, Gtk  # isort:skip
+from gi.repository import GLib, Gio, Gtk  # isort:skip
+
+_GST_TAGS_AVAILABLE = False
+_gi_repository = gi.Repository.get_default()
+_gst_versions = set(_gi_repository.enumerate_versions('Gst'))
+_gst_pbutils_versions = set(_gi_repository.enumerate_versions('GstPbutils'))
+if '1.0' in _gst_versions and '1.0' in _gst_pbutils_versions:
+    gi.require_version('Gst', '1.0')  # isort:skip
+    gi.require_version('GstPbutils', '1.0')  # isort:skip
+    from gi.repository import Gst, GstPbutils  # isort:skip
+    Gst.init(None)
+    _GST_TAGS_AVAILABLE = True
 
 _ = gpodder.gettext
 
@@ -178,13 +189,14 @@ class ManualEpisodeDialog(Gtk.Dialog):
         self.entry_title = Gtk.Entry()
         self.entry_title.set_activates_default(True)
         self.file_media = Gtk.FileChooserButton.new(_('Select media file'), Gtk.FileChooserAction.OPEN)
+        self.file_media.set_select_multiple(True)
         self.file_media.set_hexpand(True)
         self.entry_link = Gtk.Entry()
         self.entry_link.set_placeholder_text('https://example.com/episode-page')
         self.entry_guid = Gtk.Entry()
         self.entry_guid.set_placeholder_text(_('Leave blank to auto-generate'))
         self.entry_published = Gtk.Entry()
-        self.entry_published.set_text(_dt.datetime.now().strftime('%Y-%m-%d %H:%M'))
+        self.entry_published.set_text('')
         self.spin_season_num = Gtk.SpinButton.new_with_range(0, 9999, 1)
         self.spin_episode_num = Gtk.SpinButton.new_with_range(0, 9999, 1)
         self.check_mark_new = Gtk.CheckButton.new_with_label(_('Mark episode as new'))
@@ -251,10 +263,12 @@ class ManualEpisodeDialog(Gtk.Dialog):
 
     def get_data(self):
         buf = self.text_description.get_buffer()
+        media_files = self.file_media.get_filenames()
         return {
             'podcast': self.get_selected_podcast(),
             'title': self.entry_title.get_text().strip(),
-            'media_file': self.file_media.get_filename(),
+            'media_file': media_files[0] if media_files else None,
+            'media_files': media_files,
             'replace_media': self.check_replace_media.get_active(),
             'published_text': self.entry_published.get_text().strip(),
             'link': self.entry_link.get_text().strip(),
@@ -338,8 +352,8 @@ class ManualEntryController(object):
         try:
             response = dialog.run()
             if response == Gtk.ResponseType.OK:
-                episode = self.add_manual_episode(**dialog.get_data())
-                self._refresh_ui_after_episode_change(episode)
+                result = self.add_manual_episode(**dialog.get_data())
+                self._refresh_ui_after_episode_change(result[-1] if isinstance(result, list) else result)
         except Exception as exc:
             self._show_error(_('Could not add manual episode'), str(exc))
         finally:
@@ -404,48 +418,56 @@ class ManualEntryController(object):
         podcast.save()
         return podcast
 
-    def add_manual_episode(self, podcast, title, media_file, published_text,
+    def add_manual_episode(self, podcast, title, media_files=None, published_text='',
+                           media_file=None,
                            link='', guid='', season_num=0, episode_num=0,
                            is_new=True, description='', replace_media=True):
         if podcast is None:
             raise ManualEntryError(_('A podcast must be selected.'))
 
-        title = (title or '').strip()
-        if not title:
-            raise ManualEntryError(_('Episode title is required.'))
-
-        if not media_file:
+        files = [f for f in (media_files or []) if f]
+        if media_file and media_file not in files:
+            files.append(media_file)
+        if not files:
             raise ManualEntryError(_('A media file must be selected.'))
 
-        source = pathlib.Path(media_file).expanduser().resolve()
-        if not source.exists() or not source.is_file():
-            raise ManualEntryError(_('Selected media file was not found.'))
+        title = (title or '').strip()
+        episodes = []
+        for media_file in files:
+            source = pathlib.Path(media_file).expanduser().resolve()
+            if not source.exists() or not source.is_file():
+                raise ManualEntryError(_('Selected media file was not found.'))
 
-        published = self._parse_published_datetime(published_text)
+            metadata = self._read_media_metadata(source)
+            episode_title = metadata.get('title') or title or source.stem
+            episode_description = metadata.get('description') or (description or '').strip() or ''
+            published = self._parse_published_datetime(published_text, metadata.get('published'))
 
-        episode = podcast.EpisodeClass(podcast)
-        self._apply_episode_fields(
-            episode,
-            podcast=podcast,
-            title=title,
-            published=published,
-            link=link,
-            guid=guid,
-            season_num=season_num,
-            episode_num=episode_num,
-            is_new=is_new,
-            description=description,
-            media_source=source,
-            replace_media=True,
-            is_new_record=True,
-        )
+            episode = podcast.EpisodeClass(podcast)
+            self._apply_episode_fields(
+                episode,
+                podcast=podcast,
+                title=episode_title,
+                published=published,
+                link=link,
+                guid=guid,
+                season_num=season_num,
+                episode_num=episode_num,
+                is_new=is_new,
+                description=episode_description,
+                media_source=source,
+                replace_media=True,
+                is_new_record=True,
+            )
 
-        episode.save()
-        self._ensure_episode_in_channel_list(episode)
+            episode.save()
+            self._ensure_episode_in_channel_list(episode)
+            episodes.append(episode)
+
         if hasattr(podcast, '_determine_common_prefix'):
             podcast._determine_common_prefix()
         podcast.save()
-        return episode
+        return episodes if len(episodes) > 1 else episodes[0]
 
     def update_manual_episode(self, episode, podcast, title, media_file, replace_media,
                               published_text, link='', guid='', season_num=0, episode_num=0,
@@ -584,10 +606,43 @@ class ManualEntryController(object):
             uuid.uuid4().hex,
         )
 
-    def _parse_published_datetime(self, text):
+    def _read_media_metadata(self, source):
+        file = Gio.File.new_for_path(str(source))
+        info = file.query_info(
+            Gio.FILE_ATTRIBUTE_TIME_MODIFIED,
+            Gio.FileQueryInfoFlags.NONE,
+            None,
+        )
+        tags = None
+        if _GST_TAGS_AVAILABLE:
+            discoverer = GstPbutils.Discoverer.new(5 * Gst.SECOND)
+            try:
+                media_info = discoverer.discover_uri(source.as_uri())
+            except GLib.Error:
+                media_info = None
+            tags = media_info.get_tags() if media_info is not None else None
+
+        title = self._get_tag_string(tags, 'title') or source.stem
+        description = self._get_tag_string(tags, 'comment') or ''
+        modified = info.get_attribute_uint64(Gio.FILE_ATTRIBUTE_TIME_MODIFIED)
+        return {
+            'title': (title or '').strip(),
+            'description': (description or '').strip(),
+            'published': int(modified) if modified else None,
+        }
+
+    def _get_tag_string(self, taglist, tag_name):
+        if taglist is None:
+            return None
+        has_tag, value = taglist.get_string(tag_name)
+        if has_tag:
+            return value
+        return None
+
+    def _parse_published_datetime(self, text, fallback_timestamp=None):
         text = (text or '').strip()
         if not text:
-            return int(time.time())
+            return int(fallback_timestamp) if fallback_timestamp else int(time.time())
 
         for fmt in ('%Y-%m-%d %H:%M', '%Y-%m-%d', '%Y/%m/%d %H:%M', '%Y/%m/%d'):
             try:
