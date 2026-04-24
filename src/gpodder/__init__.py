@@ -19,10 +19,11 @@
 
 # This metadata block gets parsed by setup.py and pyproject.toml - use single quotes only
 __tagline__ = 'Media aggregator and podcast client'
-__author__ = 'Thomas Perl <thp@gpodder.org> (with mods by RobL)'  #RobL
-__version__ = '4.0.0'                                             #RobL - Previous Version 3.11.5'
-__date__ = '2026-04-22'                                           #RobL - Previous Date 2024-12-17
-__copyright__ = '© 2005-2024 The gPodder Team (+ RobL mods)'      #RobL
+__author__ = 'Thomas Perl <thp@gpodder.org>'
+__author2__ = 'Thomas Perl'                     #RobL - Added for "about" dialog
+__version__ = '4.0.0'                           #RobL - Previous Version 3.11.5'
+__date__ = '2026-04-22'                         #RobL - Previous Date 2024-12-17
+__copyright__ = '© 2005-2024 The gPodder Team'
 __license__ = 'GNU General Public License, version 3 or later'
 __url__ = 'http://gpodder.org/'
 

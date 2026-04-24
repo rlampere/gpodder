@@ -93,7 +93,7 @@
           <attribute name="label" translatable="yes">Update podcast</attribute>
         </item>
         <item>
-          <attribute name="action">win.manualEntryManager</attribute>
+          <attribute name="action">win.manualAddPodcast</attribute>
           <attribute name="label" translatable="yes">Add podcast manually</attribute>
         </item>
         <item>

@@ -309,7 +309,7 @@ class gPodderApplication(Gtk.Application):
         self.menu_popover.popup()
 
     def on_about(self, action, param):
-        dlg = Gtk.Dialog(_('About gPodder+'), self.window.gPodder,
+        dlg = Gtk.Dialog(_('About gPodder+'), self.window.gPodder,  #RobL
                 Gtk.DialogFlags.MODAL)
         dlg.add_button(_('_Close'), Gtk.ResponseType.OK).show()
         dlg.set_resizable(True)
@@ -319,22 +319,36 @@ class gPodderApplication(Gtk.Application):
         bg.pack_start(Gtk.Image.new_from_pixbuf(pb), False, False, 0)
         label = Gtk.Label(justify=Gtk.Justification.CENTER)
         label.set_selectable(True)
+        #RobL--v
         label.set_markup('\n'.join(x.strip() for x in """
         <b>gPodder+ {version} ({date})</b>
 
-        {copyright}
+        {tagline}
+
+        Author: {author} <i>(+ mods by RobL)</i>
+
+        {copyright} <i>(+ mods by RobL)</i>
 
         {license}
 
         <a href="{url}">{tr_website}</a> · <a href="{bugs_url}">{tr_bugtracker}</a>
-        """.format(version=gpodder.__version__,
+
+        <u>Current Database In Use:</u>
+        GPODDER_HOME={home}
+        GPODDER_DOWNLOAD_DIR={downloads}
+        """.format(tagline=gpodder.__tagline__,
+                   author=gpodder.__author2__,
+                   version=gpodder.__version__,
                    date=gpodder.__date__,
                    copyright=gpodder.__copyright__,
                    license=gpodder.__license__,
                    bugs_url='https://github.com/gpodder/gpodder/issues',
                    url=html.escape(gpodder.__url__),
                    tr_website=_('Website'),
-                   tr_bugtracker=_('Bug Tracker')).strip().split('\n')))
+                   tr_bugtracker=_('Bug Tracker'),
+                   home=gpodder.home,
+                   downloads=gpodder.downloads).strip().split('\n')))
+        #RobL--^
         label.connect('activate-link', lambda label, url: util.open_website(url))
 
         bg.pack_start(label, False, False, 0)
@@ -395,7 +409,9 @@ class gPodderApplication(Gtk.Application):
         #    self.window.check_for_distro_updates()
         #else:
         #    self.window.check_for_updates(silent=False)
-        self.window.show_message('Software updates are disabled to avoid issues with gPodder+ modifications') #RobL
+        self.window.show_message(                                                            #RobL
+            _('Software updates are disabled to avoid issues with gPodder+ modifications'),  #RobL
+            important=True)                                                                  #RobL
 
     def on_subscribe_to_url_activate(self, action, param):
         self.window.subscribe_to_url(param.get_string())

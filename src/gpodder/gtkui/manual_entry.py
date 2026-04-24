@@ -29,7 +29,7 @@ Expected minimal integration points in gpodder/src/gpodder/gtkui/main.py:
 Expected menu additions in share/gpodder/ui/gtk/menus.ui:
 
     <item>
-      <attribute name="action">win.manualEntryManager</attribute>
+      <attribute name="action">win.manualAddPodcast</attribute>
       <attribute name="label" translatable="yes">Add podcast manually</attribute>
     </item>
 
@@ -73,7 +73,8 @@ try:
     from mutagen import MutagenError
 except Exception:  # pragma: no cover - optional dependency
     MutagenFile = None
-    MutagenError = Exception
+    class MutagenError(Exception):
+        pass
 
 import gi  # isort:skip
 
@@ -93,26 +94,24 @@ def _slugify(value):
     value = value.strip('-')
     return value or 'item'
 
-
 def _stringify_tag_value(value):
     if value is None:
         return ''
-    if isinstance(value, (list, tuple)):
-        for item in value:
-            result = _stringify_tag_value(item)
-            if result:
-                return result
-        return ''
-    if isinstance(value, bytes):
-        for encoding in ('utf-8', 'latin-1'):
-            try:
-                return value.decode(encoding).strip()
-            except Exception:
-                pass
-        return ''
-    text = str(value).strip()
-    return text
 
+    # Mutagen ID3 frame objects usually expose text as a list
+    if hasattr(value, 'text'):
+        text_value = getattr(value, 'text', None)
+        if text_value:
+            if isinstance(text_value, (list, tuple)):
+                parts = [str(v).strip() for v in text_value if str(v).strip()]
+                return '\n'.join(parts).strip()
+            return str(text_value).strip()
+
+    if isinstance(value, (list, tuple)):
+        parts = [str(v).strip() for v in value if str(v).strip()]
+        return '\n'.join(parts).strip()
+
+    return str(value).strip()
 
 def _get_tag_value(audio, *keys):
     if audio is None:
@@ -122,6 +121,7 @@ def _get_tag_value(audio, *keys):
     if tags is None:
         return ''
 
+    # Exact case-insensitive match first
     lowered = {str(k).lower(): k for k in tags.keys()} if hasattr(tags, 'keys') else {}
     for key in keys:
         actual = lowered.get(key.lower())
@@ -130,56 +130,58 @@ def _get_tag_value(audio, *keys):
             if value:
                 return value
 
-    # Some mutagen tag containers are dict-like but don't expose .keys() the same way.
-    for key in keys:
-        try:
-            value = _stringify_tag_value(tags.get(key))
-        except Exception:
-            value = ''
-        if value:
-            return value
+    # Prefix match for ID3 frames like COMM::eng
+    if hasattr(tags, 'keys'):
+        for actual_key in tags.keys():
+            actual_key_str = str(actual_key).lower()
+            for key in keys:
+                if actual_key_str.startswith(key.lower()):
+                    value = _stringify_tag_value(tags.get(actual_key))
+                    if value:
+                        return value
 
     return ''
 
-
 def _extract_media_metadata(path_obj):
-    """Return metadata dict for a media file.
-
-    Cross-format behavior in this baseline:
-      * title comes from tags when available, otherwise filename stem
-      * description comes from comments/comment/description tags when available
-      * published timestamp comes from the file's modified time
-
-    The uploaded baseline already has Mutagen as an optional dependency via the
-    tagging extensions and does not include any existing tag-reading path in the
-    manual-entry code.
-    """
     source = pathlib.Path(path_obj).expanduser().resolve()
     title = source.stem
     description = ''
     published = int(source.stat().st_mtime)
 
+    #print('MutagenFile =', MutagenFile)
+
     if MutagenFile is not None:
+        audio_easy = None
+        audio_raw = None
+
         try:
-            audio = MutagenFile(str(source))
-        except (MutagenError, OSError, ValueError):
-            audio = None
+            audio_easy = MutagenFile(str(source), easy=True)
+        except (MutagenError, OSError, ValueError, TypeError):
+            audio_easy = None
 
-        if audio is not None:
-            tag_title = _get_tag_value(
-                audio,
-                'title', '©nam', 'tit2'
-            )
-            if tag_title:
-                title = tag_title
+        try:
+            audio_raw = MutagenFile(str(source))
+        except (MutagenError, OSError, ValueError, TypeError):
+            audio_raw = None
 
+        # Title
+        tag_title = _get_tag_value(audio_easy, 'title')
+        if not tag_title:
+            tag_title = _get_tag_value(audio_raw, 'TIT2', 'title', 'tit2', '©nam')
+        if tag_title:
+            title = tag_title
+
+        # Comments / description
+        tag_description = _get_tag_value(audio_easy, 'comment', 'comments', 'description')
+        if not tag_description:
             tag_description = _get_tag_value(
-                audio,
-                'comments', 'comment', 'description', 'desc',
-                '©cmt', 'comm', 'lyrics', 'unsyncedlyrics'
+                audio_raw,
+                'COMM', 'comment', 'comments',
+                'TDES', 'description', 'desc',
+                '©cmt'
             )
-            if tag_description:
-                description = tag_description
+        if tag_description:
+            description = tag_description
 
     return {
         'title': title.strip() or source.stem,
@@ -187,7 +189,6 @@ def _extract_media_metadata(path_obj):
         'published': published,
         'media_file': str(source),
     }
-
 
 class ManualPodcastDialog(Gtk.Dialog):
     def __init__(self, parent, podcast=None):
@@ -291,8 +292,18 @@ class ManualEpisodeDialog(Gtk.Dialog):
 
         self.entry_title = Gtk.Entry()
         self.entry_title.set_activates_default(True)
+
         self.file_media = Gtk.FileChooserButton.new(_('Select media file'), Gtk.FileChooserAction.OPEN)
         self.file_media.set_hexpand(True)
+        self.file_media.connect('selection-changed', self.on_media_file_selected)
+
+        self.media_help_label = Gtk.Label(
+            label=_('Select a media file first so the title, description, and published date fields can be populated.'),
+            xalign=0,
+        )
+        self.media_help_label.set_line_wrap(True)
+        self.media_help_label.set_max_width_chars(60)
+
         self.entry_link = Gtk.Entry()
         self.entry_link.set_placeholder_text('https://example.com/episode-page')
         self.entry_guid = Gtk.Entry()
@@ -301,47 +312,70 @@ class ManualEpisodeDialog(Gtk.Dialog):
         self.entry_published.set_text(_dt.datetime.now().strftime('%Y-%m-%d %H:%M'))
         self.spin_season_num = Gtk.SpinButton.new_with_range(0, 9999, 1)
         self.spin_episode_num = Gtk.SpinButton.new_with_range(0, 9999, 1)
+
         self.check_mark_new = Gtk.CheckButton.new_with_label(_('Mark episode as new'))
         self.check_mark_new.set_active(True)
+
         self.check_replace_media = Gtk.CheckButton.new_with_label(_('Replace media file from selected source'))
         self.check_replace_media.set_active(not is_edit)
+
         self.text_description = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD)
         desc_sw = Gtk.ScrolledWindow()
         desc_sw.set_hexpand(True)
         desc_sw.set_vexpand(True)
         desc_sw.add(self.text_description)
 
-        fields = [
-            (_('Podcast'), self.combo_podcast),
-            (_('Episode title'), self.entry_title),
-            (_('Description'), desc_sw),
-            (_('Published (YYYY-MM-DD HH:MM)'), self.entry_published),
-            (_('Episode page link'), self.entry_link),
-            (_('Season'), self.spin_season_num),
-            (_('Episode #'), self.spin_episode_num),
-            (_('GUID override'), self.entry_guid),
-            (_('Media file'), self.file_media),
-        ]
-
+        # Populate the form with the data fields.
         row = 0
-        for label, widget in fields:
-            lbl = Gtk.Label(label=label, xalign=0)
-            grid.attach(lbl, 0, row, 1, 1)
-            grid.attach(widget, 1, row, 1, 1)
-            row += 1
+
+        grid.attach(Gtk.Label(label=_('Podcast'), xalign=0), 0, row, 1, 1)
+        grid.attach(self.combo_podcast, 1, row, 1, 1)
+        row += 1
+
+        # Add fields associated with the media file.
+        grid.attach(Gtk.Label(label=_(''), xalign=0), 0, row, 1, 1)
+        grid.attach(self.media_help_label, 1, row, 1, 1)
+        row += 1
+
+        grid.attach(Gtk.Label(label=_('Media file'), xalign=0), 0, row, 1, 1)
+        grid.attach(self.file_media, 1, row, 1, 1)
+        row += 1
 
         if is_edit:
-            media_label = Gtk.Label(
-                label=_('Media file: {}').format(getattr(episode, 'download_filename', '') or _('(none)')),
+            grid.attach(Gtk.Label(label=_('Current media file'), xalign=0), 0, row, 1, 1)
+            curr_file = Gtk.Label(
+                label=_('{}').format(getattr(episode, 'download_filename', '') or _('(none)')),
                 xalign=0,
             )
-            grid.attach(media_label, 1, row, 1, 1)
+            grid.attach(curr_file, 1, row, 1, 1)
             row += 1
             grid.attach(self.check_replace_media, 1, row, 1, 1)
             row += 1
 
+        # Add remaining data fields.
+        fields = [
+            (_('Episode title'), self.entry_title),
+            (_('Description'), desc_sw),
+            (_('Published'), self.entry_published),
+            (_('Episode page link'), self.entry_link),
+            (_('Season'), self.spin_season_num),
+            (_('Episode #'), self.spin_episode_num),
+            (_('GUID override'), self.entry_guid),
+        ]
+
+        for label, widget in fields:
+            if label:
+                lbl = Gtk.Label(label=label, xalign=0)
+                grid.attach(lbl, 0, row, 1, 1)
+            else:
+                spacer = Gtk.Label(label='', xalign=0)
+                grid.attach(spacer, 0, row, 1, 1)
+            grid.attach(widget, 1, row, 1, 1)
+            row += 1
+
         grid.attach(self.check_mark_new, 1, row, 1, 1)
 
+        # Populate form fields if editing an existing episode.
         if episode is not None:
             self.entry_title.set_text(episode.title or '')
             if episode.published:
@@ -362,6 +396,27 @@ class ManualEpisodeDialog(Gtk.Dialog):
     def get_selected_podcast(self):
         idx = self.combo_podcast.get_active()
         return None if idx < 0 else self._podcasts[idx]
+
+    def on_media_file_selected(self, chooser):
+        filename = chooser.get_filename()
+        if not filename:
+            return
+
+        metadata = _extract_media_metadata(filename)
+        #print('TITLE =', repr(metadata.get('title')))
+        #print('DESCRIPTION =', repr(metadata.get('description')))
+        #print('PUBLISHED =', repr(metadata.get('published')))
+
+        self.entry_title.set_text(metadata.get('title', '') or '')
+
+        buf = self.text_description.get_buffer()
+        buf.set_text(metadata.get('description', '') or '')
+
+        published = metadata.get('published')
+        if published:
+            self.entry_published.set_text(
+                _dt.datetime.fromtimestamp(int(published)).strftime('%Y-%m-%d %H:%M')
+            )
 
     def get_data(self):
         buf = self.text_description.get_buffer()
@@ -410,9 +465,13 @@ class ManualBatchEpisodeDialog(Gtk.Dialog):
         if self._podcasts:
             self.combo_podcast.set_active(active_index)
 
-        self.file_batch = Gtk.FileChooserButton.new(_('Select media files'), Gtk.FileChooserAction.OPEN)
-        self.file_batch.set_select_multiple(True)
+        self.selected_files = []
+
+        self.file_batch = Gtk.Button.new_with_label(_('Select media files...'))
         self.file_batch.set_hexpand(True)
+        self.file_batch.connect('clicked', self.on_choose_batch_files_clicked)
+        self.file_batch_status = Gtk.Label(label=_('No files selected'), xalign=0)
+
         self.check_mark_new = Gtk.CheckButton.new_with_label(_('Mark imported episodes as new'))
         self.check_mark_new.set_active(True)
         self.check_use_tags = Gtk.CheckButton.new_with_label(_('Read title/comments from file tags when available'))
@@ -420,21 +479,17 @@ class ManualBatchEpisodeDialog(Gtk.Dialog):
 
         info = Gtk.Label(
             label=_(
-                'Batch import rules:
-'
-                ' • title tag -> episode title
-'
-                ' • comments/comment/description tag -> description
-'
-                ' • file modified time -> published date
-'
-                'When a tag is missing, the filename is used for the title.'
+                'Batch Import Rules:\n'
+                ' • episode title = file [title] tag (if title tag is missing, filename is used.)\n'
+                ' • episode description = file [comments/comment/description] tag\n'
+                ' • episode published date = file modified date'
             ),
             xalign=0,
             justify=Gtk.Justification.LEFT,
         )
 
         row = 0
+
         for label, widget in (
             (_('Podcast'), self.combo_podcast),
             (_('Media files'), self.file_batch),
@@ -444,6 +499,10 @@ class ManualBatchEpisodeDialog(Gtk.Dialog):
             grid.attach(widget, 1, row, 1, 1)
             row += 1
 
+        grid.attach(Gtk.Label(label='', xalign=0), 0, row, 1, 1)
+        grid.attach(self.file_batch_status, 1, row, 1, 1)
+        row += 1
+
         grid.attach(self.check_mark_new, 1, row, 1, 1)
         row += 1
         grid.attach(self.check_use_tags, 1, row, 1, 1)
@@ -452,22 +511,45 @@ class ManualBatchEpisodeDialog(Gtk.Dialog):
 
         self.show_all()
 
+    def on_choose_batch_files_clicked(self, button):
+        dialog = Gtk.FileChooserDialog(
+            title=_('Select media files'),
+            transient_for=self,
+            action=Gtk.FileChooserAction.OPEN,
+        )
+        dialog.add_buttons(
+            _('_Cancel'), Gtk.ResponseType.CANCEL,
+            _('_Open'), Gtk.ResponseType.OK,
+        )
+        dialog.set_current_folder(gpodder.downloads)
+        dialog.set_select_multiple(True)
+
+        try:
+            response = dialog.run()
+            if response == Gtk.ResponseType.OK:
+                self.selected_files = dialog.get_filenames()
+                count = len(self.selected_files)
+                if count == 0:
+                    self.file_batch_status.set_text(_('No files selected'))
+                elif count == 1:
+                    self.file_batch_status.set_text(
+                        _('1 file selected: %s') % os.path.basename(self.selected_files[0])
+                    )
+                else:
+                    self.file_batch_status.set_text(
+                        _('%d files selected') % count
+                    )
+        finally:
+            dialog.destroy()
+
     def get_selected_podcast(self):
         idx = self.combo_podcast.get_active()
         return None if idx < 0 else self._podcasts[idx]
 
     def get_data(self):
-        chooser = self.file_batch
-        filenames = []
-        try:
-            filenames = chooser.get_filenames()
-        except Exception:
-            single = chooser.get_filename()
-            if single:
-                filenames = [single]
         return {
             'podcast': self.get_selected_podcast(),
-            'media_files': filenames,
+            'media_files': list(self.selected_files),
             'is_new': self.check_mark_new.get_active(),
             'use_file_tags': self.check_use_tags.get_active(),
         }
@@ -481,7 +563,7 @@ class ManualEntryController(object):
 
     def install_actions(self, action_group):
         for name, callback in (
-            ('manualEntryManager', self.on_manual_entry_manager_activate),
+            ('manualAddPodcast', self.on_manual_add_podcast_activate),
             ('manualEditPodcast', self.on_manual_edit_podcast_activate),
             ('manualAddEpisode', self.on_manual_add_episode_activate),
             ('manualAddEpisodeBatch', self.on_manual_add_episode_batch_activate),
@@ -491,22 +573,22 @@ class ManualEntryController(object):
             action.connect('activate', callback)
             action_group.add_action(action)
 
-    def on_manual_entry_manager_activate(self, action, param=None):
-        self.open_manual_podcast_dialog()
+    def on_manual_add_podcast_activate(self, action, param=None):
+        self.open_manual_add_podcast_dialog()
 
     def on_manual_edit_podcast_activate(self, action, param=None):
-        self.open_edit_manual_podcast_dialog()
+        self.open_manual_edit_podcast_dialog()
 
     def on_manual_add_episode_activate(self, action, param=None):
-        self.open_manual_episode_dialog()
+        self.open_manual_add_episode_dialog()
 
     def on_manual_add_episode_batch_activate(self, action, param=None):
-        self.open_manual_batch_episode_dialog()
+        self.open_manual_add_episode_batch_dialog()
 
     def on_manual_edit_episode_activate(self, action, param=None):
-        self.open_edit_manual_episode_dialog()
+        self.open_manual_edit_episode_dialog()
 
-    def open_manual_podcast_dialog(self):
+    def open_manual_add_podcast_dialog(self):
         dialog = ManualPodcastDialog(self.ui.main_window)
         try:
             response = dialog.run()
@@ -518,7 +600,7 @@ class ManualEntryController(object):
         finally:
             dialog.destroy()
 
-    def open_edit_manual_podcast_dialog(self):
+    def open_manual_edit_podcast_dialog(self):
         podcast = getattr(self.ui, 'active_channel', None)
         if podcast is None:
             self._show_error(_('No podcast selected'), _('Select a podcast first.'))
@@ -535,12 +617,12 @@ class ManualEntryController(object):
         finally:
             dialog.destroy()
 
-    def open_manual_episode_dialog(self):
+    def open_manual_add_episode_dialog(self):
         podcasts = list(self.ui.model.get_podcasts())
         if not podcasts:
             self._show_error(
                 _('No podcasts available'),
-                _('Create a manual podcast or subscribe to one first.'),
+                _('Create a podcast manually or subscribe to one first.'),
             )
             return
 
@@ -552,11 +634,11 @@ class ManualEntryController(object):
                 episode = self.add_manual_episode(**dialog.get_data())
                 self._refresh_ui_after_episode_change(episode)
         except Exception as exc:
-            self._show_error(_('Could not add manual episode'), str(exc))
+            self._show_error(_('Could not add episode manually'), str(exc))
         finally:
             dialog.destroy()
 
-    def open_manual_batch_episode_dialog(self):
+    def open_manual_add_episode_batch_dialog(self):
         podcasts = list(self.ui.model.get_podcasts())
         if not podcasts:
             self._show_error(
@@ -578,7 +660,7 @@ class ManualEntryController(object):
         finally:
             dialog.destroy()
 
-    def open_edit_manual_episode_dialog(self):
+    def open_manual_edit_episode_dialog(self):
         episode = self._get_single_selected_episode()
         if episode is None:
             self._show_error(_('No episode selected'), _('Select exactly one episode first.'))
@@ -643,9 +725,8 @@ class ManualEntryController(object):
         if podcast is None:
             raise ManualEntryError(_('A podcast must be selected.'))
 
-        title = (title or '').strip()
-        if not title:
-            raise ManualEntryError(_('Episode title is required.'))
+
+
 
         if not media_file:
             raise ManualEntryError(_('A media file must be selected.'))
@@ -654,7 +735,18 @@ class ManualEntryController(object):
         if not source.exists() or not source.is_file():
             raise ManualEntryError(_('Selected media file was not found.'))
 
-        published = self._parse_published_datetime(published_text)
+        metadata = _extract_media_metadata(source)
+
+        title = (title or '').strip() or metadata['title']
+        if not title:
+            raise ManualEntryError(_('Episode title is required.'))
+
+        if published_text:
+            published = self._parse_published_datetime(published_text)
+        else:
+            published = metadata['published']
+
+        description = (description or '').strip() or metadata['description']
 
         episode = podcast.EpisodeClass(podcast)
         self._apply_episode_fields(
