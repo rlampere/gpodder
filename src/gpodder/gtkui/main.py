@@ -121,6 +121,22 @@ class gPodder(BuilderWidget):
 
         self.main_window.show()
 
+        #RobL--v
+        # Show a progress indicator during startup.
+        debug_pause=0.0  # Set to 0 to disable the artificial pause.
+        self.startup_indicator = ProgressIndicator(
+            _('Starting gPodder+'),
+            _('Initializing application...'),
+            False,
+            self.get_dialog_parent(),
+            x_offset=-60,
+            y_offset=-50,
+        )
+        self.startup_indicator.on_message(_('Preparing main window...'))
+        self.startup_indicator.on_progress(0.10)
+        self.startup_pause(debug_pause)
+        #RobL--^
+
         self.gPodder.connect('key-press-event', self.on_key_press)
 
         self.episode_columns_menu = None
@@ -185,6 +201,13 @@ class gPodder(BuilderWidget):
         self._podcast_list_search_timeout = None
         self._episode_list_search_timeout = None
 
+        #RobL--v
+        # Show a progress indicator update.
+        self.startup_indicator.on_message(_('Loading podcasts from database...'))
+        self.startup_indicator.on_progress(0.20)
+        self.startup_pause(debug_pause)
+        #RobL--^
+
         # Subscribed channels
         self.active_channel = None
         self.channels = self.model.get_podcasts()
@@ -197,6 +220,13 @@ class gPodder(BuilderWidget):
 
         self.releasecell = None
 
+        #RobL--v
+        # Show a progress indicator update.
+        self.startup_indicator.on_message(_('Building podcast and episode views...'))
+        self.startup_indicator.on_progress(0.30)
+        self.startup_pause(debug_pause)
+        #RobL--^
+
         # Init the treeviews that we use
         self.init_podcast_list_treeview()
         self.init_episode_list_treeview()
@@ -206,6 +236,13 @@ class gPodder(BuilderWidget):
         self.download_list_update_timer = None
         self.things_adding_tasks = 0
         self.download_task_monitors = set()
+
+        #RobL--v
+        # Show a progress indicator update.
+        self.startup_indicator.on_message(_('Loading playback applications...'))
+        self.startup_indicator.on_progress(0.50)
+        self.startup_pause(debug_pause)
+        #RobL--^
 
         # Set up the first instance of MygPoClient
         self.mygpo_client = my.MygPoClient(self.config)
@@ -235,11 +272,25 @@ class gPodder(BuilderWidget):
         self.user_apps_reader = UserAppsReader(['audio', 'video'])
         util.run_in_background(self.user_apps_reader.read)
 
+        #RobL--v
+        # Show a progress indicator update.
+        self.startup_indicator.on_message(_('Updating podcast list...'))
+        self.startup_indicator.on_progress(0.60)
+        self.startup_pause(debug_pause)
+        #RobL--^
+
         # Now, update the feed cache, when everything's in place
         if not self.application.want_headerbar:
             self.btnUpdateFeeds.show()
         self.feed_cache_update_cancelled = False
         self.update_podcast_list_model()
+
+        #RobL--v
+        # Show a progress indicator update.
+        self.startup_indicator.on_message(_('Scanning downloads for incomplete files...'))
+        self.startup_indicator.on_progress(0.70)
+        self.startup_pause(debug_pause)
+        #RobL--^
 
         self.partial_downloads_indicator = None
         util.run_in_background(self.find_partial_downloads)
@@ -249,12 +300,26 @@ class gPodder(BuilderWidget):
         if self.config.auto.update.enabled:
             self.restart_auto_update_timer()
 
+        #RobL--v
+        # Show a progress indicator update.
+        self.startup_indicator.on_message(_('Checking for old and expired episodes...'))
+        self.startup_indicator.on_progress(0.80)
+        self.startup_pause(debug_pause)
+        #RobL--^
+
         # Find expired (old) episodes and delete them
         old_episodes = list(common.get_expired_episodes(self.channels, self.config))
         if len(old_episodes) > 0:
             self.delete_episode_list(old_episodes, confirm=False)
             updated_urls = {e.channel.url for e in old_episodes}
             self.update_podcast_list_model(updated_urls)
+
+        #RobL--v
+        # Show a progress indicator update.
+        self.startup_indicator.on_message(_('Starting web service sync...'))
+        self.startup_indicator.on_progress(0.90)
+        self.startup_pause(debug_pause)
+        #RobL--^
 
         # Do the initial sync with the web service
         if self.mygpo_client.can_access_webservice():
@@ -272,6 +337,18 @@ class gPodder(BuilderWidget):
                 self.config.software_update.last_check = int(time.time())
                 if not os.path.exists(gpodder.no_update_check_file):
                     self.check_for_updates(silent=True)
+
+        #RobL--v
+        # Show a final progress indicator update.
+        self.startup_indicator.on_message(_('Updating episode list...'))
+        self.startup_indicator.on_progress(0.95)
+        self.startup_pause(0.5)
+        self.startup_indicator.on_message(_('Startup complete'))
+        self.startup_indicator.on_progress(1.0)
+        self.startup_pause(0.5)
+        self.startup_indicator.on_finished()
+        self.startup_indicator = None
+        #RobL--^
 
         if self.options.close_after_startup:
             logger.warning("Startup done, closing (--close-after-startup)")
@@ -456,26 +533,53 @@ class gPodder(BuilderWidget):
             self._for_each_task_set_status(selected_tasks, download.DownloadTask.QUEUED)
         self.resume_all_infobar.set_revealed(False)
 
+    #RobL--vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv---
+    # find_partial_downloads has been modified to show progress indicator
+    # updates using the main startup progress indicator when its available.
+    # When it is not available, it will create its own progress indicator
+    # for the duration of the scan.
     def find_partial_downloads(self):
-        def start_progress_callback(count):
-            if count:
-                self.partial_downloads_indicator = ProgressIndicator(
-                        _('Loading incomplete downloads'),
-                        _('Some episodes have not finished downloading in a previous session.'),
-                        False, self.get_dialog_parent())
-                self.partial_downloads_indicator.on_message(N_(
-                    '%(count)d partial file', '%(count)d partial files',
-                    count) % {'count': count})
 
-                util.idle_add(self.wNotebook.set_current_page, 1)
+        def start_progress_callback(count):
+            if not count:
+                return
+
+            def start_ui():
+                self.partial_downloads_indicator = ProgressIndicator(
+                    _('Loading incomplete downloads'),
+                    _('Some episodes have not finished downloading in a previous session.'),
+                    False,
+                    self.get_dialog_parent(),
+                    x_offset=60,
+                    y_offset=50,
+                )
+                self.partial_downloads_indicator.on_message(
+                    _('Scanning for incomplete downloads from previous session...\n%s')
+                    % (N_('%(count)d partial file', '%(count)d partial files', count)
+                        % {'count': count})
+                )
+                self.partial_downloads_indicator.on_progress(0.0)
+                self.wNotebook.set_current_page(1)
+
+            util.idle_add(start_ui)
 
         def progress_callback(title, progress):
-            self.partial_downloads_indicator.on_message(title)
-            self.partial_downloads_indicator.on_progress(progress)
-            self.partial_downloads_indicator.on_tick()  # not cancellable
+            def update_ui():
+                if self.partial_downloads_indicator is None:
+                    return
+                self.partial_downloads_indicator.on_message(title)
+                self.partial_downloads_indicator.on_progress(progress)
+
+            util.idle_add(update_ui)
 
         def final_progress_callback():
-            self.partial_downloads_indicator.on_tick(final=_('Cleaning up...'))
+            def final_ui():
+                if self.partial_downloads_indicator is None:
+                    return
+                self.partial_downloads_indicator.on_message(_('Cleaning up...'))
+                self.partial_downloads_indicator.on_progress(1.0)
+
+            util.idle_add(final_ui)
 
         def finish_progress_callback(resumable_episodes):
             def offer_resuming():
@@ -483,21 +587,25 @@ class gPodder(BuilderWidget):
                     self.download_episode_list_paused(resumable_episodes, hide_progress=True)
                     self.resume_all_infobar.set_revealed(True)
                 else:
-                    util.idle_add(self.wNotebook.set_current_page, 0)
+                    self.wNotebook.set_current_page(0)
+
                 logger.debug("find_partial_downloads done, calling extensions")
                 gpodder.user_extensions.on_find_partial_downloads_done()
 
-                if self.partial_downloads_indicator:
-                    util.idle_add(self.partial_downloads_indicator.on_finished)
+                if self.partial_downloads_indicator is not None:
+                    self.partial_downloads_indicator.on_finished()
                     self.partial_downloads_indicator = None
 
             util.idle_add(offer_resuming)
 
-        common.find_partial_downloads(self.channels,
-                start_progress_callback,
-                progress_callback,
-                final_progress_callback,
-                finish_progress_callback)
+        common.find_partial_downloads(
+            self.channels,
+            start_progress_callback,
+            progress_callback,
+            final_progress_callback,
+            finish_progress_callback
+        )
+        #RobL--^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^---
 
     def in_downloads_list(self):
         return self.wNotebook.get_current_page() == 1
@@ -4098,3 +4206,16 @@ class gPodder(BuilderWidget):
 
     def _on_playback_stopped(self, _start, _end, _total, episode):
         self.episode_list_status_changed([episode])
+
+    #RobL--v
+    # Routine to pause the startup indicator process for a short time
+    # after each update to allow startup messages to be seen.
+    def startup_pause(self, seconds):
+        if seconds <= 0.0:
+            return
+        while Gtk.events_pending():
+            Gtk.main_iteration_do(False)
+        time.sleep(seconds)
+        while Gtk.events_pending():
+            Gtk.main_iteration_do(False)
+    #RobL--^

@@ -35,7 +35,8 @@ class ProgressIndicator(object):
     # Time between GUI updates after window creation
     INTERVAL = 250
 
-    def __init__(self, title, subtitle=None, cancellable=False, parent=None, max_ticks=None):
+    def __init__(self, title, subtitle=None, cancellable=False, parent=None, max_ticks=None,  #RobL
+                 x_offset=0, y_offset=0):                                                      #RobL
         self.title = title
         self.subtitle = subtitle
         self.cancellable = True if cancellable else False
@@ -44,6 +45,8 @@ class ProgressIndicator(object):
         self.cancelled = False
         self.next_update = time.time() + (self.DELAY / 1000)
         self.parent = parent
+        self.x_offset = x_offset  #RobL
+        self.y_offset = y_offset  #RobL
         self.dialog = None
         self.progressbar = None
         self.indicator = None
@@ -108,6 +111,23 @@ class ProgressIndicator(object):
         self.indicator = SpinningProgressIndicator()
         self.dialog.set_image(self.indicator)
         self.dialog.show_all()
+
+        #RobL--v
+        # Provides a way to place dialogs near each other without overlap.
+        if self.parent is not None:
+            try:
+                # Center relative to the parent window, then apply offset
+                px, py = self.parent.get_position()
+                pw, ph = self.parent.get_size()
+                dw, dh = self.dialog.get_size()
+
+                x = px + max((pw - dw) // 2, 0) + self.x_offset
+                y = py + max((ph - dh) // 2, 0) + self.y_offset
+
+                self.dialog.move(x, y)
+            except Exception:
+                pass
+        #RobL--^
 
         self._update_gui()
 
