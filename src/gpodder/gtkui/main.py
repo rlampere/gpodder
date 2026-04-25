@@ -84,6 +84,14 @@ class gPodder(BuilderWidget):
         self.extensions_actions = []
         self._search_podcasts = None
         self._search_episodes = None
+
+        # RobL--v
+        # Progress indicator used by the deferred partial-download scan.
+        # Initialize it here so offer_resuming() can safely test it even
+        # when no partial-download progress window has been created.
+        self.partial_downloads_indicator = None
+        # RobL--^
+
         BuilderWidget.__init__(self, None,
             _gtk_properties={('gPodder', 'application'): app})
 
@@ -285,16 +293,6 @@ class gPodder(BuilderWidget):
         self.feed_cache_update_cancelled = False
         self.update_podcast_list_model()
 
-        #RobL--v
-        # Show a progress indicator update.
-        self.startup_indicator.on_message(_('Scanning downloads for incomplete files...'))
-        self.startup_indicator.on_progress(0.70)
-        self.startup_pause(debug_pause)
-        #RobL--^
-
-        self.partial_downloads_indicator = None
-        util.run_in_background(self.find_partial_downloads)
-
         # Start the auto-update procedure
         self._auto_update_timer_source_id = None
         if self.config.auto.update.enabled:
@@ -303,21 +301,24 @@ class gPodder(BuilderWidget):
         #RobL--v
         # Show a progress indicator update.
         self.startup_indicator.on_message(_('Checking for old and expired episodes...'))
-        self.startup_indicator.on_progress(0.80)
+        self.startup_indicator.on_progress(0.70)
         self.startup_pause(debug_pause)
         #RobL--^
 
+        #RobL--v
+        # Temporarily disabling this check -- no sure I even want this done automatically.
         # Find expired (old) episodes and delete them
-        old_episodes = list(common.get_expired_episodes(self.channels, self.config))
-        if len(old_episodes) > 0:
-            self.delete_episode_list(old_episodes, confirm=False)
-            updated_urls = {e.channel.url for e in old_episodes}
-            self.update_podcast_list_model(updated_urls)
+        #old_episodes = list(common.get_expired_episodes(self.channels, self.config))
+        #if len(old_episodes) > 0:
+        #    self.delete_episode_list(old_episodes, confirm=False)
+        #    updated_urls = {e.channel.url for e in old_episodes}
+        #    self.update_podcast_list_model(updated_urls)
+        #RobL--^
 
         #RobL--v
         # Show a progress indicator update.
         self.startup_indicator.on_message(_('Starting web service sync...'))
-        self.startup_indicator.on_progress(0.90)
+        self.startup_indicator.on_progress(0.80)
         self.startup_pause(debug_pause)
         #RobL--^
 
@@ -339,15 +340,33 @@ class gPodder(BuilderWidget):
                     self.check_for_updates(silent=True)
 
         #RobL--v
-        # Show a final progress indicator update.
+        # Show a final progress indicator update. The first message saying
+        # "Updating episode list..." is a bit of a catch-all for the remaining
+        # startup tasks that don't have their own progress updates, and the second
+        # message "Startup complete" is the final message before finishing the
+        # progress indicator.
         self.startup_indicator.on_message(_('Updating episode list...'))
-        self.startup_indicator.on_progress(0.95)
+        self.startup_indicator.on_progress(0.90)
         self.startup_pause(0.5)
         self.startup_indicator.on_message(_('Startup complete'))
         self.startup_indicator.on_progress(1.0)
         self.startup_pause(0.5)
         self.startup_indicator.on_finished()
         self.startup_indicator = None
+        #RobL--^
+
+        #RobL--v
+        # Defer slow network-share download-folder checks until the UI is usable.
+        defer_secs=2  # Number of seconds to defer the download-folder check.
+        print(f'Scheduling deferred check of download folders - wait %s seconds', defer_secs)
+        GLib.timeout_add_seconds(defer_secs, self.check_download_folders_deferred)
+        #RobL--^
+
+        #RobL--v
+        # Defer start of finding partial downloads until the UI is usable.
+        defer_secs+=10  # Number of seconds to defer the download-folder check.
+        print(f'Scheduling deferred scan for partial downloads - wait %s seconds', defer_secs)
+        GLib.timeout_add_seconds(defer_secs, self.find_partial_downloads_deferred)
         #RobL--^
 
         if self.options.close_after_startup:
@@ -605,7 +624,73 @@ class gPodder(BuilderWidget):
             final_progress_callback,
             finish_progress_callback
         )
-        #RobL--^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^---
+    #RobL--^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^---
+
+    #RobL--vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv---
+    def find_partial_downloads_deferred(self):
+        """Start the partial-download scan after the UI has initialized.
+
+        Returning False tells GLib to run this timeout only once.
+        """
+        logger.info('Deferred partial-download scan starting')
+        util.run_in_background(self.find_partial_downloads)
+        return False
+    #RobL--^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^---
+
+
+    #RobL--vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv---
+    # Added this method to defer the check of download folders until after the
+    # UI has started, to avoid blocking startup with potentially long-running
+    # file system operations. This preserves the old behavior of detecting
+    # externally-added or deleted download files while improving startup performance.
+    def check_download_folders_deferred(self):
+        """Check podcast download folders after the UI has started.
+
+        This avoids blocking startup while still preserving the old behavior
+        of detecting externally-added or deleted download files.
+        """
+        if not self.channels:
+            return False
+
+        channels = list(self.channels)
+        total = len(channels)
+        changed_urls = set()
+
+        logger.info('Deferred download-folder scan started for %d podcasts', total)
+
+        def worker():
+            for index, podcast in enumerate(channels, 1):
+                try:
+                    logger.debug(
+                        'Checking download folder %d/%d: %s',
+                        index,
+                        total,
+                        podcast.title
+                    )
+
+                    podcast.check_download_folder()
+                    changed_urls.add(podcast.url)
+
+                except Exception:
+                    logger.error(
+                        'Error checking download folder for %s',
+                        getattr(podcast, 'title', podcast),
+                        exc_info=True
+                    )
+
+            def finish_ui():
+                logger.info('Deferred download-folder scan finished')
+
+                if changed_urls:
+                    self.update_podcast_list_model(changed_urls)
+
+                return False
+
+            util.idle_add(finish_ui)
+
+        util.run_in_background(worker)
+        return False
+    #RobL--^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^---
 
     def in_downloads_list(self):
         return self.wNotebook.get_current_page() == 1
@@ -2498,8 +2583,8 @@ class gPodder(BuilderWidget):
             remaining_seconds = remaining_seconds - 3600
         util.idle_timeout_add(remaining_seconds * 1000, self.refresh_episode_dates)
 
-    def update_podcast_list_model(self, urls=None, selected=False, select_url=None,
-            sections_changed=False):
+    def update_podcast_list_model(self, urls=None, selected=False, select_url=None,  #RobL
+            sections_changed=False, select_first=False):                             #RobL
         """Update the podcast list treeview model.
 
         If urls is given, it should list the URLs of each
@@ -2578,10 +2663,13 @@ class gPodder(BuilderWidget):
             # Update the podcast list model with new channels
             self.podcast_list_model.set_channels(self.db, self.config, self.channels)
 
+            #RobL--v
+            # Changes original behavior of automatically selecting the first podcast
+            # in the list.
             try:
-                selected_iter = model.get_iter_first()
-                # Find the previously-selected URL in the new
-                # model if we have an URL (else select first)
+                selected_iter = None
+
+                # Find the previously-selected URL in the new model if we have one.
                 if select_url is not None:
                     pos = model.get_iter_first()
                     while pos is not None:
@@ -2591,11 +2679,22 @@ class gPodder(BuilderWidget):
                             break
                         pos = model.iter_next(pos)
 
+                # Old behavior: if no specific podcast was requested, select the first row.
+                # New startup behavior can pass select_first=False to leave nothing selected.
+                elif select_first:
+                    selected_iter = model.get_iter_first()
+
                 if selected_iter is not None:
                     selection.select_iter(selected_iter)
-                self.on_treeChannels_cursor_changed(self.treeChannels)
+                    self.on_treeChannels_cursor_changed(self.treeChannels)
+                else:
+                    selection.unselect_all()
+                    self.active_channel = None
+                    self.update_episode_list_model()
+
             except:
                 logger.error('Cannot select podcast in list', exc_info=True)
+            #RobL--^
 
     def on_episode_list_filter_changed(self, has_episodes):
         self.play_or_download()

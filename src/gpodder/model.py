@@ -1583,8 +1583,17 @@ class Model(object):
             self.children = self.db.load_podcasts(podcast_factory)
 
             # Check download folders for changes (bug 902)
-            for podcast in self.children:
-                podcast.check_download_folder()
+            #RobL--v
+            #
+            # Copilot suggests:
+            # This is now done in PodcastChannel.get_save_dir() which is called during
+            # loading of the podcast and which also creates the download folder if it
+            # does not exist. This should be sufficient to detect changes to the
+            # download folder and to import externally downloaded files.
+            #
+            #for podcast in self.children:
+            #    podcast.check_download_folder()
+            #RobL--^
 
         return self.children
 
