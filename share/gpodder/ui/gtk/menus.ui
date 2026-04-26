@@ -104,6 +104,14 @@
           <attribute name="action">win.editChannel</attribute>
           <attribute name="label" translatable="yes">Podcast settings</attribute>
         </item>
+        <item>
+            <attribute name="action">win.undeleteChannelEpisodes</attribute>
+            <attribute name="label" translatable="yes">Restore deleted episodes</attribute>
+        </item>
+        <item>
+            <attribute name="action">win.removeDeletedEpisodes</attribute>
+            <attribute name="label" translatable="yes">Remove deleted episodes</attribute>
+        </item>
       </section>
       <section>
         <item>
@@ -340,6 +348,10 @@
       <item>
         <attribute name="action">win.undeleteChannelEpisodes</attribute>
         <attribute name="label" translatable="yes">Restore deleted episodes</attribute>
+      </item>
+      <item>
+          <attribute name="action">win.removeDeletedEpisodes</attribute>
+          <attribute name="label" translatable="yes">Remove deleted episodes</attribute>
       </item>
       <item>
         <attribute name="action">win.refreshImage</attribute>

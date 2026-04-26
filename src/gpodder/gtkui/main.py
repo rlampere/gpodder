@@ -41,7 +41,6 @@ from gpodder.player import MyGPOClientObserver, PlayerInterface
 from gpodder.services import AutoRegisterObserver
 from gpodder.syncui import gPodderSyncUI
 
-
 from . import shownotes
 from .manual_entry import ManualEntryController  #RobL
 from .desktop.channel import gPodderChannel
@@ -297,7 +296,6 @@ class gPodder(BuilderWidget):
         self._auto_update_timer_source_id = None
         if self.config.auto.update.enabled:
             self.restart_auto_update_timer()
-
         #RobL--v
         # Show a progress indicator update.
         self.startup_indicator.on_message(_('Checking for old and expired episodes...'))
@@ -481,6 +479,7 @@ class gPodder(BuilderWidget):
             ('importFromFile', self.on_item_import_from_file_activate),
             ('exportChannels', self.on_itemExportChannels_activate),
             ('markEpisodesAsOldNew', self.on_mark_episodes_as_old_new),      #RobL
+            ('removeDeletedEpisodes', self.on_remove_deleted_episodes),      #RobL
             ('undeleteChannelEpisodes', self.on_undelete_channel_episodes),  #RobL
             ('refreshImage', self.on_itemRefreshCover_activate),
             # Episodes
@@ -2058,6 +2057,20 @@ class gPodder(BuilderWidget):
 
         self.update_podcast_list_model(selected=True)
         self.update_episode_list_icons(update_all=True)
+    #RobL--^
+
+    #RobL--v
+    # Remove delete episodes from the channel instead of marking them as deleted.
+    def on_remove_deleted_episodes(self, item, *args):
+        assert self.active_channel is not None
+
+        removed = self.active_channel.remove_deleted_episodes()
+
+        if removed:
+            self.db.commit()
+            self.update_podcast_list_model({self.active_channel.url})
+            self.update_episode_list_model()
+            self.update_episode_list_icons(update_all=True)
     #RobL--^
 
     #RobL--v
@@ -3821,8 +3834,25 @@ class gPodder(BuilderWidget):
     def on_itemRefreshCover_activate(self, widget, *args):
         assert self.active_channel is not None
 
+        # RobL--v
+        # If a local folder.jpg exists in the podcast download folder, use it.
+        # Do NOT call replace_cover(..., custom_url=False), because that path
+        # deletes the existing folder.jpg before attempting to reload/download art.
+        folder_jpg = self.active_channel.cover_file + '.jpg'
+
+        self.active_channel.cover_thumb = None
+        self.active_channel.save()
         self.podcast_list_model.clear_cover_cache(self.active_channel.url)
-        self.cover_downloader.replace_cover(self.active_channel, custom_url=False)
+
+        if os.path.exists(folder_jpg):
+            self.cover_downloader.request_cover(
+                self.active_channel,
+                custom_url=None,
+                avoid_downloading=True
+            )
+        else:
+            self.cover_downloader.replace_cover(self.active_channel, custom_url=False)
+        # RobL--^
 
     def on_itemRemoveChannel_activate(self, widget, *args):
         if self.active_channel is None:

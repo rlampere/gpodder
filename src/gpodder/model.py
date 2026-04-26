@@ -1346,6 +1346,28 @@ class PodcastChannel(PodcastModelObject):
         # Sort episodes by pubdate, descending
         self.children.sort(key=lambda e: e.published, reverse=True)
 
+    #RobL--v
+    # Removes episodes that are marked as deleted from the database and from the
+    # podcast's episode list.
+    def remove_deleted_episodes(self):
+        """Permanently remove STATE_DELETED episodes from this podcast."""
+        if self.id is None:
+            return []
+
+        removed = []
+
+        for episode in list(self.get_all_episodes()):
+            if episode.state == gpodder.STATE_DELETED:
+                logger.debug('Removing deleted episode from database: %s', episode.title)
+                self.db.delete_episode_by_guid(episode.guid, self.id)
+                removed.append(episode)
+
+                if self.children is not None and episode in self.children:
+                    self.children.remove(episode)
+
+        return removed
+    #RobL--v
+
     def update(self, max_episodes=0):
         max_episodes = int(max_episodes)
         new_episodes = []
