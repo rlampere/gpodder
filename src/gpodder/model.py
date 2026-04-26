@@ -604,14 +604,14 @@ class PodcastEpisode(PodcastModelObject):
 
     def html_description(self):
         return self.description_html \
-            or util.nice_html_description(self.episode_art_url, self.description or _('No description available'))
+            or util.nice_html_description(self.episode_art_url, self.description or _(' ')) #RobL - removed 'No description available' text
 
     def one_line_description(self):
         MAX_LINE_LENGTH = 120
         desc = self._text_description
         desc = re.sub(r'\s+', ' ', desc).strip()
         if not desc:
-            return _('No description available')
+            return _(' ') #RobL - removed 'No description available' text
         else:
             desc = desc.strip()
 
