@@ -30,12 +30,14 @@ import hashlib
 import json
 import logging
 import os
-import re
 import shutil
 import string
 import time
 import urllib.parse
 import datetime  #RobL
+
+import re               #RobL
+from io import BytesIO  #RobL
 
 import podcastparser
 
@@ -45,6 +47,29 @@ from gpodder import coverart, feedcore, registry, schema, util, vimeo, youtube
 logger = logging.getLogger(__name__)
 
 _ = gpodder.gettext
+
+#RobL--v
+_XML_ENTITY_RE = re.compile(
+    rb'&(?!amp;|lt;|gt;|quot;|apos;|#[0-9]+;|#x[0-9A-Fa-f]+;)'
+)
+
+def _repair_unescaped_xml_ampersands(data):
+    """Repair raw ampersands that are illegal in XML.
+
+    XML only allows '&' when it begins a valid entity such as:
+        &amp; &lt; &gt; &quot; &apos; &#123; &#x1F;
+    A feed URL such as '?a=1&b=2' is invalid XML and must be
+    represented as '?a=1&amp;b=2'.
+
+    This function only repairs ampersands that are not already valid
+    XML entities.
+    """
+    if not data:
+        return data, 0
+
+    repaired, count = _XML_ENTITY_RE.subn(rb'&amp;', data)
+    return repaired, count
+#RobL--^
 
 
 class Feed:
@@ -213,15 +238,75 @@ class gPodderFetcher(feedcore.Fetcher):
         url = vimeo.get_real_channel_url(url)
         return url
 
+    #RobL--v
+    # ----- Old Version -----
+    #def parse_feed(self, url, feed_data, data_stream, headers, status, max_episodes=0, **kwargs):
+    #    self.feed_data = feed_data
+    #    try:
+    #        feed = podcastparser.parse(url, data_stream)
+    #        feed['url'] = url
+    #        feed['headers'] = headers
+    #        return feedcore.Result(status, PodcastParserFeed(feed, self, max_episodes))
+    #    except ValueError as e:
+    #        raise feedcore.InvalidFeed('Could not parse feed: {url}: {msg}'.format(url=url, msg=e))
+    # ----- New Version -----
     def parse_feed(self, url, feed_data, data_stream, headers, status, max_episodes=0, **kwargs):
         self.feed_data = feed_data
+
         try:
+            # First try: strict parsing of the feed XML.
             feed = podcastparser.parse(url, data_stream)
-            feed['url'] = url
-            feed['headers'] = headers
-            return feedcore.Result(status, PodcastParserFeed(feed, self, max_episodes))
-        except ValueError as e:
-            raise feedcore.InvalidFeed('Could not parse feed: {url}: {msg}'.format(url=url, msg=e))
+        except ValueError as first_error:
+            # Try a simple/safe fix:
+            #   Some feeds erroneously contain raw '&' characters in XML attribute values,
+            #   most commonly inside enclosure URLs. That is invalid XML. The "try" above
+            #   did strict parsing of the XML. If that fails do we attempt to repair any
+            #   unescaped ampersands and retry parsing the entire feed.
+            repaired_feed_data = None
+
+            if feed_data is not None and getattr(feed_data, 'content', None):
+                repaired_content, repair_count = _repair_unescaped_xml_ampersands(feed_data.content)
+
+                if repair_count:
+                    logger.warning(
+                        'Feed %s failed strict XML parsing; retrying after repairing %d unescaped ampersand(s): %s',
+                        url, repair_count, first_error
+                    )
+
+                    try:
+                        # Second try: parsing of the repaired feed XML.
+                        feed = podcastparser.parse(url, BytesIO(repaired_content))
+
+                        # Keep self.feed_data consistent with the content that was actually parsed.
+                        repaired_feed_data = feedcore.FetcherFeedData(
+                            repaired_content.decode('utf-8', errors='replace'),
+                            repaired_content
+                        )
+                        self.feed_data = repaired_feed_data
+
+                        logger.warning(
+                            'Feed %s parsed successfully after repairing %d unescaped ampersand(s)',
+                            url, repair_count
+                        )
+                    except ValueError:
+                        # Preserve the original parse error. Do not hide it behind
+                        # a second failure from the repair attempt.
+                        raise feedcore.InvalidFeed(
+                            'Could not parse feed: {url}: {msg}'.format(url=url, msg=first_error)
+                        )
+                else:
+                    raise feedcore.InvalidFeed(
+                        'Could not parse feed #2: {url}: {msg}'.format(url=url, msg=first_error)
+                    )
+            else:
+                raise feedcore.InvalidFeed(
+                    'Could not parse feed #1: {url}: {msg}'.format(url=url, msg=first_error)
+                )
+
+        feed['url'] = url
+        feed['headers'] = headers
+        return feedcore.Result(status, PodcastParserFeed(feed, self, max_episodes))
+    #RobL--^
 
 
 # Our podcast model:

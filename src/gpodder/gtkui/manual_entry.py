@@ -87,6 +87,29 @@ _ = gpodder.gettext
 class ManualEntryError(Exception):
     pass
 
+#RobL--v
+def _episode_edit_description(episode):
+    """Return the description text to show in the manual episode editor.
+
+    Prefer description_html because feed-imported episodes may store the
+    publisher's original description there. If no HTML description exists,
+    fall back to the plain-text description.
+    """
+    if episode is None:
+        return ''
+
+    if episode.description_html:
+        return episode.description_html
+
+    if episode.description:
+        return episode.description
+
+    return ''
+
+def _episode_edit_description_is_html(episode):
+    """Return True if the manual episode editor should save description as HTML."""
+    return bool(episode is not None and episode.description_html)
+#RobL--^
 
 def _slugify(value):
     value = (value or '').strip().lower()
@@ -272,12 +295,18 @@ class ManualEpisodeDialog(Gtk.Dialog):
         )
         self.set_default_response(Gtk.ResponseType.OK)
         self.set_border_width(12)
-        self.set_default_size(620, 460)
+        self.set_resizable(True)
+        self.set_default_size(760, 680)
 
         self._podcasts = list(podcasts)
 
         area = self.get_content_area()
+        area.set_hexpand(True)
+        area.set_vexpand(True)
+
         grid = Gtk.Grid(column_spacing=12, row_spacing=8, margin=12)
+        grid.set_hexpand(True)
+        grid.set_vexpand(True)
         area.add(grid)
 
         self.combo_podcast = Gtk.ComboBoxText()
@@ -316,13 +345,22 @@ class ManualEpisodeDialog(Gtk.Dialog):
         self.check_mark_new = Gtk.CheckButton.new_with_label(_('Mark episode as new'))
         self.check_mark_new.set_active(True)
 
+        self.check_description_html = Gtk.CheckButton.new_with_label(_('Store description as HTML'))
+        self.check_description_html.set_tooltip_text(
+            _('Save the description field as HTML instead of plain text.')
+        )
         self.check_replace_media = Gtk.CheckButton.new_with_label(_('Replace media file from selected source'))
         self.check_replace_media.set_active(not is_edit)
 
         self.text_description = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD)
+        self.text_description.set_hexpand(True)
+        self.text_description.set_vexpand(True)
+
         desc_sw = Gtk.ScrolledWindow()
         desc_sw.set_hexpand(True)
         desc_sw.set_vexpand(True)
+        desc_sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        desc_sw.set_min_content_height(300)
         desc_sw.add(self.text_description)
 
         # Populate the form with the data fields.
@@ -366,6 +404,9 @@ class ManualEpisodeDialog(Gtk.Dialog):
         for label, widget in fields:
             if label:
                 lbl = Gtk.Label(label=label, xalign=0)
+                if label == _('Description'):
+                    lbl.set_valign(Gtk.Align.START)
+                    widget.set_vexpand(True)
                 grid.attach(lbl, 0, row, 1, 1)
             else:
                 spacer = Gtk.Label(label='', xalign=0)
@@ -374,6 +415,8 @@ class ManualEpisodeDialog(Gtk.Dialog):
             row += 1
 
         grid.attach(self.check_mark_new, 1, row, 1, 1)
+        row += 1
+        grid.attach(self.check_description_html, 1, row, 1, 1)
 
         # Populate form fields if editing an existing episode.
         if episode is not None:
@@ -388,8 +431,9 @@ class ManualEpisodeDialog(Gtk.Dialog):
             self.spin_episode_num.set_value(int(getattr(episode, 'episode_num', 0) or 0))
             self.check_mark_new.set_active(bool(getattr(episode, 'is_new', False)))
             self.check_replace_media.set_active(False)
+            self.check_description_html.set_active(_episode_edit_description_is_html(episode))
             buf = self.text_description.get_buffer()
-            buf.set_text((episode.description or '').strip())
+            buf.set_text(_episode_edit_description(episode).strip())
 
         self.show_all()
 
@@ -432,6 +476,7 @@ class ManualEpisodeDialog(Gtk.Dialog):
             'episode_num': self.spin_episode_num.get_value_as_int(),
             'is_new': self.check_mark_new.get_active(),
             'description': buf.get_text(buf.get_start_iter(), buf.get_end_iter(), True).strip(),
+            'description_is_html': self.check_description_html.get_active(),
         }
 
 
@@ -721,7 +766,8 @@ class ManualEntryController(object):
 
     def add_manual_episode(self, podcast, title, media_file, published_text,
                            link='', guid='', season_num=0, episode_num=0,
-                           is_new=True, description='', replace_media=True):
+                           is_new=True, description='', description_is_html=False,
+                           replace_media=True):
         if podcast is None:
             raise ManualEntryError(_('A podcast must be selected.'))
 
@@ -760,6 +806,7 @@ class ManualEntryController(object):
             episode_num=episode_num,
             is_new=is_new,
             description=description,
+            description_is_html=description_is_html,
             media_source=source,
             replace_media=True,
             is_new_record=True,
@@ -818,7 +865,7 @@ class ManualEntryController(object):
 
     def update_manual_episode(self, episode, podcast, title, media_file, replace_media,
                               published_text, link='', guid='', season_num=0, episode_num=0,
-                              is_new=True, description=''):
+                              is_new=True, description='', description_is_html=False):
         if podcast is None:
             raise ManualEntryError(_('A podcast must be selected.'))
 
@@ -854,6 +901,7 @@ class ManualEntryController(object):
             episode_num=episode_num,
             is_new=is_new,
             description=description,
+            description_is_html=description_is_html,
             media_source=source,
             replace_media=bool(replace_media),
             is_new_record=False,
@@ -870,6 +918,7 @@ class ManualEntryController(object):
 
     def _apply_episode_fields(self, episode, podcast, title, published, link, guid,
                               season_num, episode_num, is_new, description,
+                              description_is_html=False,
                               media_source=None, replace_media=False,
                               is_new_record=False):
         old_destination = None
@@ -877,8 +926,15 @@ class ManualEntryController(object):
             old_destination = episode.local_filename(create=False, check_only=True)
 
         episode.title = title
-        episode.description = (description or '').strip()
-        episode.description_html = ''
+
+        description = (description or '').strip()
+        if description_is_html:
+            episode.description = ''
+            episode.description_html = description
+        else:
+            episode.description = description
+            episode.description_html = ''
+
         if hasattr(episode, 'cache_text_description'):
             episode.cache_text_description()
 

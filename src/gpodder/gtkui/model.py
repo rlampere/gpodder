@@ -289,13 +289,27 @@ class EpisodeListModel(Gtk.ListStore):
     def _format_description(self, episode):
         d = []
 
+        #RobL--^
+        # Display the episode title differently based on its state.
         title = episode.trimmed_title if self._config_ui_gtk_episode_list_trim_title_prefix else episode.title
+        escaped_title = html.escape(title)
         if episode.state != gpodder.STATE_DELETED and episode.is_new:
+            d.append('<span foreground="Black">')
             d.append('<b>')
-            d.append(html.escape(title))
+            d.append(escaped_title)
             d.append('</b>')
+            d.append('</span>')
+        elif episode.state != gpodder.STATE_DELETED and not episode.is_new:
+            d.append('<span foreground="Blue">')
+            d.append('<i>')
+            d.append(escaped_title)
+            d.append('</i>')
+            d.append('</span>')
         else:
-            d.append(html.escape(title))
+            d.append('<span foreground="Red">')
+            d.append(escaped_title)
+            d.append('</span>')
+        #RobL--^
 
         if self._config_ui_gtk_episode_list_descriptions:
             d.append('\n')
@@ -790,12 +804,18 @@ class PodcastListModel(Gtk.ListStore):
                 util.get_first_line(util.remove_html_tags(channel.description)) or ' ')
         else:
             description_markup = html.escape(_('Subscription paused'))
+
+        #RobL--v
         d = []
         if new:
-            d.append('<span weight="bold">')
-        d.append(title_markup)
-        if new:
-            d.append('</span>')
+            d.append('<span foreground="Blue"><span weight="bold"><i>')
+            d.append(title_markup)
+            d.append('</i></span></span>')
+        else:
+            d.append('<span foreground="Black"><b>')
+            d.append(title_markup)
+            d.append('</b></span>')
+        #RobL--^
 
         if channel._update_error is not None:
             return ''.join(d + ['\n', '<span weight="bold">', description_markup, '</span>'])

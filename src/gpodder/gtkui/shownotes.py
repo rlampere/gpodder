@@ -318,9 +318,12 @@ class gPodderShownotesHTML(gPodderShownotes):
         self.manager = WebKit2.UserContentManager()
         self.html_view = WebKit2.WebView.new_with_user_content_manager(self.manager)
         settings = self.html_view.get_settings()
-        settings.set_enable_java(False)
-        settings.set_enable_plugins(False)
-        settings.set_enable_javascript(False)
+        #RobL--v
+        # Disable features that aren't necessary.
+        #settings.set_enable_java(False)
+        #settings.set_enable_plugins(False)
+        #settings.set_enable_javascript(False)  
+        #RobL--^
         # uncomment to show web inspector
         # settings.set_enable_developer_extras(True)
         self.html_view.set_property('expand', True)
@@ -463,14 +466,130 @@ class gPodderShownotesHTML(gPodderShownotes):
         var = GLib.Variant.new_string(url)
         return WebKit2.ContextMenuItem.new_from_gaction(action, label, var)
 
+    #RobL--v
+    #def get_stylesheet(self):
+    #    if self.stylesheet is None:
+    #        style = ("html { background: %s; color: %s;}"
+    #                 " a { color: %s; }"
+    #                 " a:visited { color: %s; }"
+    #                 " #gpodder-title h3, #gpodder-title p { margin: 0}"
+    #                 " #gpodder-title {margin-block-end: 1em;}") % \
+    #                 (self.background_color.to_string(), self.foreground_color.to_string(),
+    #                  self.link_color.to_string(), self.visited_color.to_string())
+    #        self.stylesheet = WebKit2.UserStyleSheet(style, 0, 1, None, None)
+    #    return self.stylesheet
+    #RobL--^
+
+    #RobL--v
     def get_stylesheet(self):
         if self.stylesheet is None:
-            style = ("html { background: %s; color: %s;}"
-                     " a { color: %s; }"
-                     " a:visited { color: %s; }"
-                     " #gpodder-title h3, #gpodder-title p { margin: 0}"
-                     " #gpodder-title {margin-block-end: 1em;}") % \
-                     (self.background_color.to_string(), self.foreground_color.to_string(),
-                      self.link_color.to_string(), self.visited_color.to_string())
+            style = """
+                html {
+                    background: %s;
+                    color: %s;
+                }
+
+                body {
+                    margin: 0;
+                    padding: 16px 20px 24px 20px;
+                    font-family: sans-serif;
+                    font-size: 15px;
+                    line-height: 1.45;
+                    max-width: 900px;
+                }
+
+                a {
+                    color: %s;
+                    text-decoration: none;
+                }
+
+                a:hover {
+                    text-decoration: underline;
+                }
+
+                a:visited {
+                    color: %s;
+                }
+
+                #gpodder-title {
+                    margin: 0 0 18px 0;
+                    padding: 0 0 12px 0;
+                    border-bottom: 1px solid rgba(128, 128, 128, 0.35);
+                }
+
+                #gpodder-title h3 {
+                    margin: 0 0 6px 0;
+                    font-size: 1.35em;
+                    line-height: 1.25;
+                    font-weight: bold;
+                }
+
+                #gpodder-title p {
+                    margin: 2px 0;
+                }
+
+                p {
+                    margin: 0 0 0.9em 0;
+                }
+
+                ul, ol {
+                    margin-top: 0.4em;
+                    margin-bottom: 0.9em;
+                    padding-left: 1.6em;
+                }
+
+                li {
+                    margin-bottom: 0.35em;
+                }
+
+                blockquote {
+                    margin: 0.8em 0;
+                    padding: 0.5em 1em;
+                    border-left: 4px solid rgba(128, 128, 128, 0.45);
+                    background: rgba(128, 128, 128, 0.08);
+                }
+
+                img, video, iframe {
+                    max-width: 100%%;
+                    height: auto;
+                }
+
+                pre {
+                    white-space: pre-wrap;
+                    overflow-wrap: anywhere;
+                    padding: 0.75em;
+                    background: rgba(128, 128, 128, 0.10);
+                    border-radius: 4px;
+                }
+
+                code {
+                    font-family: monospace;
+                }
+
+                hr {
+                    border: 0;
+                    border-top: 1px solid rgba(128, 128, 128, 0.35);
+                    margin: 1.2em 0;
+                }
+
+                table {
+                    border-collapse: collapse;
+                    max-width: 100%%;
+                }
+
+                th, td {
+                    padding: 0.35em 0.6em;
+                    border: 1px solid rgba(128, 128, 128, 0.35);
+                    vertical-align: top;
+                }
+            """ % (
+                self.background_color.to_string(),
+                self.foreground_color.to_string(),
+                self.link_color.to_string(),
+                self.visited_color.to_string(),
+            )
+
             self.stylesheet = WebKit2.UserStyleSheet(style, 0, 1, None, None)
+
         return self.stylesheet
+    #RobL--^
