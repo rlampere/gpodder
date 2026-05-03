@@ -304,7 +304,7 @@ class gPodder(BuilderWidget):
         #RobL--^
 
         #RobL--v
-        # Temporarily disabling this check -- no sure I even want this done automatically.
+        # Temporarily disabling this check -- not sure I want this done automatically.
         # Find expired (old) episodes and delete them
         #old_episodes = list(common.get_expired_episodes(self.channels, self.config))
         #if len(old_episodes) > 0:
@@ -415,7 +415,7 @@ class gPodder(BuilderWidget):
         g.add_action(action)
 
         action = Gio.SimpleAction.new_stateful(
-            'channelAutoArchive', None, GLib.Variant.new_boolean(False))
+            'archiveEpisodesSelectedPodcast', None, GLib.Variant.new_boolean(False))  #RobL - formerly channelAutoArchive
         action.connect('activate', self.on_channel_toggle_lock_activate)
         g.add_action(action)
 
@@ -463,26 +463,38 @@ class gPodder(BuilderWidget):
         # Other Menus
 
         action_defs = [
-            # gPodder
-            # Podcasts
-            ('update', self.on_itemUpdate_activate),
-            ('downloadAllNew', self.on_itemDownloadAllNew_activate),
-            ('removeOldEpisodes', self.on_itemRemoveOldEpisodes_activate),
-            ('findPodcast', self.on_find_podcast_activate),
-            # Subscriptions
-            ('discover', self.on_itemImportChannels_activate),
-            ('addChannel', self.on_itemAddChannel_activate),
-            ('removeChannel', self.on_itemRemoveChannel_activate),
-            ('massUnsubscribe', self.on_itemMassUnsubscribe_activate),
-            ('updateChannel', self.on_itemUpdateChannel_activate),
-            ('editChannel', self.on_itemEditChannel_activate),
-            ('importFromFile', self.on_item_import_from_file_activate),
-            ('exportChannels', self.on_itemExportChannels_activate),
-            ('markEpisodesAsOldNew', self.on_mark_episodes_as_old_new),      #RobL
-            ('removeDeletedEpisodes', self.on_remove_deleted_episodes),      #RobL
-            ('undeleteChannelEpisodes', self.on_undelete_channel_episodes),  #RobL
-            ('refreshImage', self.on_itemRefreshCover_activate),
-            # Episodes
+            # Assign gPodder actions (Note: not how they appear in the UI,
+            # but grouped by functionality here for clarity)
+            # --------------------------------------------------
+            # Podcasts - actions for managing EXISTING podacasts
+            # --------------------------------------------------
+            # Actions applied to the SELECTED PODCAST.
+            ('showPodcastSettings', self.on_show_podcast_settings),                                     #RobL
+            ('updateSelectedPodcast', self.on_update_selected_podcast),                                 #RobL
+            ('findEpisodeSelectedPodcast', self.on_find_episode_selected_podcast),                      #RobL
+            # 'Edit podcast settings' - defined in manual_entry_controller below                        #RobL
+            # 'Add new podcast manually' - defined in manual_entry_controller below                     #RobL
+            # 'Add new episode manually' - defined in manual_entry_controller below                     #RobL
+            # 'Add multiple episodes manually' - defined in manual_entry_controller below               #RobL
+            ('markEpisodesOldNewSelectedPodcast', self.on_mark_episodes_as_old_new_selected_podcast),   #RobL
+            # archiveAllEpisodesSelectedPodcast - defined above                                         #RobL
+            ('undeleteEpisodesSelectedPodcast', self.on_undelete_episodes_selected_podcast),            #RobL
+            ('removeSelectedPodcast', self.on_remove_selected_podcast),                                 #RobL
+            ('removeDeletedEpisodesSelectedPodcast', self.on_remove_deleted_episodes_selected_podcast), #RobL
+            ('deleteExpiredEpisodesSelectedPodcast', self.on_delete_expired_episodes_selected_podcast), #RobL
+            ('openPodcastDownloadFolder', self.on_open_podcast_download_folder),                        #RobL            
+            ('refreshImage', self.on_itemRefreshCover_activate),                                        #RobL - right click option
+            # Actions applied to ALL PODCASTS.
+            ('checkForNewEpisodesAllPodcasts', self.on_check_for_new_episodes_all_podcasts),            #RobL
+            ('downloadNewEpisodesAllPodcasts', self.on_download_new_episodes_all_podcasts),             #RobL
+            ('updateAllPodcasts', self.on_update_all_podcasts),                                         #RobL
+            ('deleteExpiredEpisodesAllPodcasts', self.on_delete_expired_episodes_all_podcasts),         #RobL
+            ('deleteOldEpisodesAllPodcasts', self.on_delete_old_episodes_all_podcasts),                 #RobL
+            ('deleteMultiplePodcasts', self.on_delete_multiple_podcasts),                               #RobL
+            ('findPodcast', self.on_find_podcast),                                                      #RobL
+            # -------------------------------------------------
+            # Episodes - actions for managing EXISTING episodes
+            # -------------------------------------------------
             ('play', self.on_playback_selected_episodes),
             ('open', self.on_playback_selected_episodes),
             ('forceDownload', self.on_force_download_selected_episodes),
@@ -496,13 +508,20 @@ class gPodder(BuilderWidget):
             ('toggleEpisodeNew', self.on_item_toggle_played_activate),
             ('toggleEpisodeLock', self.on_item_toggle_lock_activate),
             ('openEpisodeDownloadFolder', self.on_open_episode_download_folder),
-            ('openChannelDownloadFolder', self.on_open_download_folder),
             ('selectChannel', self.on_select_channel_of_episode),
-            ('findEpisode', self.on_find_episode_activate),
             ('toggleShownotes', self.on_shownotes_selected_episodes),
             ('saveEpisodes', self.on_save_episodes_activate),
             ('bluetoothEpisodes', self.on_bluetooth_episodes_activate),
+            # ------------------------------------------------
+            # Subscriptions - actions for adding NEW podacasts
+            # ------------------------------------------------
+            ('discover', self.on_itemImportChannels_activate),
+            ('addChannel', self.on_itemAddChannel_activate),
+            ('importFromFile', self.on_item_import_from_file_activate),
+            ('exportChannels', self.on_itemExportChannels_activate),
+            # ------
             # Extras
+            # ------
             ('sync', self.on_sync_to_device_activate),
         ]
 
@@ -511,17 +530,27 @@ class gPodder(BuilderWidget):
             action.connect('activate', callback)
             g.add_action(action)
 
+
+        #RobL--v
+        # Add actions to support manual entry of podcasts and episodes.
+        # This is done using the manual-entry controller (defined in manual_entry.py),
+        # which is separate from the create_actions activities performed above.
+        # This is because these actions are specific to the manual-entry context and are
+        # not general-purpose actions that are used throughout the application.
+        # The manual-entry controller checks for the existence of its specific actions
+        # when it is initialized and logs a warning if they are not found, which allows
+        # it to degrade gracefully if the actions are missing for some reason.
         if hasattr(self, 'manual_entry_controller'):
-            self.manual_entry_controller.install_actions(g)  # RobL
+            self.manual_entry_controller.install_actions(g)
         else:
             logger.warning('manual_entry_controller not available, skipping installation of its actions')
+        #RobL--^
 
         # gPodder
         # Podcasts
-        self.update_action = g.lookup_action('update')
-        # Subscriptions
-        self.update_channel_action = g.lookup_action('updateChannel')
-        self.edit_channel_action = g.lookup_action('editChannel')
+        self.update_action = g.lookup_action('checkForNewEpisodesAllPodcasts')  #RobL - Formerly 'update'
+        self.update_channel_action = g.lookup_action('updateAllPodcasts')       #RobL - Formerly 'updateChannel'
+        self.edit_channel_action = g.lookup_action('showPodcastSettings')       #RobL - Formerly 'editChannel'
         # Episodes
         self.play_action = g.lookup_action('play')
         self.open_action = g.lookup_action('open')
@@ -535,7 +564,7 @@ class gPodder(BuilderWidget):
         self.toggle_episode_lock_action = g.lookup_action('toggleEpisodeLock')
         self.open_episode_download_folder_action = g.lookup_action('openEpisodeDownloadFolder')
         self.select_channel_of_episode_action = g.lookup_action('selectChannel')
-        self.auto_archive_action = g.lookup_action('channelAutoArchive')
+        self.auto_archive_action = g.lookup_action('archiveEpisodesSelectedPodcast')
         self.bluetooth_episodes_action = g.lookup_action('bluetoothEpisodes')
         self.episode_new_action = g.lookup_action('episodeNew')
         self.episode_lock_action = g.lookup_action('episodeLock')
@@ -887,7 +916,7 @@ class gPodder(BuilderWidget):
         ev = Dummy(x=x, y=y, button=3)
         return self.treeview_downloads_show_context_menu(ev)
 
-    def on_find_podcast_activate(self, *args):
+    def on_find_podcast(self, action, param):  #RobL
         if self._search_podcasts:
             self._search_podcasts.show_search()
 
@@ -1016,9 +1045,15 @@ class gPodder(BuilderWidget):
         if self.config.ui.gtk.search_always_visible:
             self._search_podcasts.show_search(grab_focus=False)
 
-    def on_find_episode_activate(self, *args):
+    #RobL--v
+    # Formerly on_find_episode_activate renamed to on_find_episode_selected_podcast
+    def on_find_episode_selected_podcast(self, *args):
+        """Show the episode search entry and focus it, so the user can start typing to
+        filter episodes of the selected podcast. """
+
         if self._search_episodes:
             self._search_episodes.show_search()
+    #RobL--v
 
     def set_episode_list_column(self, index, new_value):
         mask = (1 << index)
@@ -2012,9 +2047,25 @@ class gPodder(BuilderWidget):
             return True
 
     #RobL--v
-    # "Mark Episodes as Old" option was updated to "Mark Episodes as Old/New"
-    def on_mark_episodes_as_old_new(self, item, *args):
-        assert self.active_channel is not None
+    # Mark all episodes as old/new for the selected podcast.
+    # If episodes are new, mark them as old. If episodes are old, mark them as new.
+    def on_mark_episodes_as_old_new_selected_podcast(self, action, param):
+        """Toggle between marking all episodes as old or new for the selected podcast."""
+
+        if self.active_channel is None:
+            title = _('No podcast selected')
+            message = _('Please select a podcast in the podcast list to update.')
+            self.show_message(message, title, widget=self.treeChannels)
+            return
+
+        title = _('Mark all episodes as old/new in selected podcast')
+        message = _(
+            'Are you sure you want to change the old/new state of all episodes in the %s podcast?\n\n'
+            'If episodes are new, they will be marked as old.\n'
+            'If episodes are old, they will be marked as new.'
+            ) % self.active_channel.title
+        if not self.show_confirmation(message, title):
+            return False
 
         episodes = self.active_channel.get_all_episodes()
 
@@ -2033,7 +2084,7 @@ class gPodder(BuilderWidget):
 
         for episode in episodes:
             if mark_as_old:
-                logger.warning('Marking %s - %s as OLD', self.active_channel.title, episode.title)
+                #logger.warning('Marking %s - %s as OLD', self.active_channel.title, episode.title)
                 episode.is_new=False
 
                 # episode.mark(is_played=True) -- deprecated, as we want to keep the "played" state separate from the "new" state.
@@ -2044,7 +2095,7 @@ class gPodder(BuilderWidget):
                 #if not episode.was_downloaded(and_exists=True):
                 #    episode.mark(is_played=True)
             else:
-                logger.warning('Marking %s - %s as NEW', self.active_channel.title, episode.title)
+                #logger.warning('Marking %s - %s as NEW', self.active_channel.title, episode.title)
                 # Mark as new -- this also undeletes deleted episodes.
                 episode.is_new=True
 
@@ -2060,9 +2111,23 @@ class gPodder(BuilderWidget):
     #RobL--^
 
     #RobL--v
-    # Remove delete episodes from the channel instead of marking them as deleted.
-    def on_remove_deleted_episodes(self, item, *args):
-        assert self.active_channel is not None
+    # Remove deleted episodes from the selected podcast instead of displaying them as deleted.
+    def on_remove_deleted_episodes_selected_podcast(self, action, param):
+        """Find and remove episodes marked as deleted rather than displaying them as deleted."""
+
+        if self.active_channel is None:
+            title = _('No podcast selected')
+            message = _('Please select a podcast in the podcasts list to update.')
+            self.show_message(message, title, widget=self.treeChannels)
+            return
+
+        title = _('Remove deleted episodes from selected podcast')
+        message = _(
+            'Are you sure you want to permanently remove all episodes marked as deleted'
+            'from the %s podcast?'
+            ) % self.active_channel.title
+        if not self.show_confirmation(message, title):
+            return
 
         removed = self.active_channel.remove_deleted_episodes()
 
@@ -2074,9 +2139,99 @@ class gPodder(BuilderWidget):
     #RobL--^
 
     #RobL--v
-    # Undelete episodes instead of marking them as played, if they were deleted before.
-    def on_undelete_channel_episodes(self, item, *args):
-        assert self.active_channel is not None
+    def on_delete_expired_episodes_selected_podcast(self, action, param):
+        """Find and remove expired episodes and ask before deleting media files."""
+
+        if self.active_channel is None:
+            title = _('No podcast selected')
+            message = _('Please select a podcast in the podcasts list to update.')
+            self.show_message(message, title, widget=self.treeChannels)
+            return False
+
+        title = _('Remove expired episodes from selected podcast')
+        message = _(
+            'Are you sure you want to permanently remove all episodes marked as expired'
+            'from the %s podcast?'
+            ) % self.active_channel.title
+        if not self.show_confirmation(message, title):
+            return False
+
+        # If an existing podcast is selected, limit cleanup to that podcast.
+        # If "All episodes" or no podcast is selected, exit this function.
+        if self.active_channel is not None and getattr(self.active_channel, 'url', None):
+            channels = [self.active_channel]
+        else:
+            self.notification(
+                _('Selected podcast not found - ignoring deletion of expired episodes.'),
+                _('Delete expired episodes'),
+                widget=self.treeChannels
+            )
+            return False
+
+        old_episodes = list(common.get_expired_episodes(channels, self.config))
+
+        if not old_episodes:
+            self.notification(
+                _('No expired episodes were found.'),
+                _('Delete expired episodes'),
+                widget=self.treeChannels
+            )
+            return False
+
+        # confirm=True causes delete_episode_list() to show a confirmation dialog
+        # before deleting episodes.
+        self.delete_episode_list(old_episodes, confirm=True)
+
+        return True
+    #RobL--^
+
+    #RobL--v
+    # New feature: Remove expired episodes from ALL PODCASTS instead of just the selected podcast.
+    def on_delete_expired_episodes_all_podcasts(self, action, param):
+        """Find and remove expired episodes and ask before deleting media files."""
+
+        title = _('Remove expired episodes from ALL PODCASTS')
+        message = _('Are you sure you want to permanently remove all episodes marked as expired in ALL PODCASTS?')
+        if not self.show_confirmation(message, title):
+            return False
+
+        # All podcasts will be checked for expired episodes.
+        channels = self.channels
+        old_episodes = list(common.get_expired_episodes(channels, self.config))
+
+        if not old_episodes:
+            self.notification(
+                _('No expired episodes were found.'),
+                _('Delete expired episodes'),
+                widget=self.treeChannels
+            )
+            return False
+
+        # confirm=True causes delete_episode_list() to show a confirmation dialog
+        # before deleting episodes.
+        self.delete_episode_list(old_episodes, confirm=True)
+
+        return True
+    #RobL--^
+
+    #RobL--v
+    # New feature: Undelete episodes in the selected podcast instead of marking them as deleted.
+    def on_undelete_episodes_selected_podcast(self, action, param):
+        """Find deleted episodes in the selected podcast and mark them as undeleted."""
+
+        if self.active_channel is None:
+            title = _('No podcast selected')
+            message = _('Please select a podcast in the podcasts list to update.')
+            self.show_message(message, title, widget=self.treeChannels)
+            return False
+
+        title = _('Undelete episodes in selected podcast')
+        message = _(
+            'Are you sure you want to undelete all episodes marked as deleted'
+            'in the %s podcast?'
+            ) % self.active_channel.title
+        if not self.show_confirmation(message, title):
+            return
 
         for episode in self.active_channel.get_all_episodes():
             if episode.state == gpodder.STATE_DELETED:
@@ -2087,11 +2242,21 @@ class gPodder(BuilderWidget):
         self.update_episode_list_icons(update_all=True)
     #RobL--^
 
-    def on_open_download_folder(self, item, *args):
-        assert self.active_channel is not None
-        util.gui_open(self.active_channel.save_dir, gui=self)
+    #RobL--v
+    # Formerly on_open_download_folder - now on_open_podcast_download_folder
+    def on_open_podcast_download_folder(self, action, param):
+        """Opens the download folder for the selected podcast."""
 
-    def on_open_episode_download_folder(self, unused1=None, unused2=None):
+        if self.active_channel is None:
+            title = _('No podcast selected')
+            message = _('Please select a podcast in the podcasts list to update.')
+            self.show_message(message, title, widget=self.treeChannels)
+            return False
+
+        util.gui_open(self.active_channel.save_dir, gui=self)
+    #RobL--^
+
+    def on_open_episode_download_folder(self, action, param):
         episodes = self.get_selected_episodes()
         assert len(episodes) == 1
         try:
@@ -2116,7 +2281,7 @@ class gPodder(BuilderWidget):
         except GLib.GError:
             util.gui_open(episodes[0].parent.save_dir, gui=self)
 
-    def on_select_channel_of_episode(self, unused1=None, unused2=None):
+    def on_select_channel_of_episode(self, action, param):
         episodes = self.get_selected_episodes()
         assert len(episodes) == 1
         channel = episodes[0].parent
@@ -3281,8 +3446,13 @@ class gPodder(BuilderWidget):
 
         return True
 
-    def on_itemRemoveOldEpisodes_activate(self, action, param):
+    #RobL--v
+    # Formerly on_itemRemoveOldEpisodes_activate - now on_delete_old_episodes_all_podcasts
+    def on_delete_old_episodes_all_podcasts(self, action, param):
+        """Deletes episodes marked as old across all podcasts."""
+
         self.show_delete_episodes_window()
+    #RobL--^
 
     def show_delete_episodes_window(self, channel=None):
         """Offer deletion of episodes.
@@ -3387,21 +3557,39 @@ class gPodder(BuilderWidget):
             GLib.Variant.new_boolean(self.active_channel.auto_archive_episodes))
         self.channels_popover.popdown()
 
-    def on_itemUpdateChannel_activate(self, *params):
+    #RobL--v
+    # Formerly on_itemUpdateChannelsAll_activate -- now on_update_all_podcasts
+    # Separated from on_itemUpdateChannel_activate to be able to update the feed cache for the
+    # "All episodes" proxy without updating all feeds.
+    # Discussion in bug 1711 - we need to update the feed cache when the "All episodes" proxy
+    # is selected, because it might have been selected before the feed update and thus
+    # not show new episodes until the next update.
+    def on_update_all_podcasts(self, action, param):
+        # Dirty hack to check for "All episodes" (see gpodder.gtkui.model) across all podcasts.
+        if getattr(self.active_channel, 'ALL_EPISODES_PROXY', False):
+            self.update_feed_cache()
+    #RobL--v
+
+    #RobL--v
+    # Formerly on_itemUpdateChannel_activate -- now on_update_selected_podcast
+    # Dedicated this option to only updating the feed cache for the currently selected podcast,
+    # to be able to update the feed cache for a section without updating all feeds.
+    def on_update_selected_podcast(self, action, param):
         if self.active_channel is None:
             title = _('No podcast selected')
             message = _('Please select a podcast in the podcasts list to update.')
             self.show_message(message, title, widget=self.treeChannels)
             return
 
-        # Dirty hack to check for "All episodes" (see gpodder.gtkui.model)
-        if getattr(self.active_channel, 'ALL_EPISODES_PROXY', False):
-            self.update_feed_cache()
-        else:
-            self.update_feed_cache(channels=[self.active_channel])
+        self.update_feed_cache(channels=[self.active_channel])
+    #RobL--^
 
-    def on_itemUpdate_activate(self, action=None, param=None):
-        # Check if we have outstanding subscribe/unsubscribe actions
+    #RobL--v
+    # Formerly on_itemUpdate_activate -- now on_check_for_new_episodes_all_podcasts
+    def on_check_for_new_episodes_all_podcasts(self, action=None, param=None):
+        """Checks all podcasts for new episodes."""
+
+        # Check if there are outstanding subscribe/unsubscribe actions
         self.on_add_remove_podcasts_mygpo()
 
         if self.channels:
@@ -3430,6 +3618,7 @@ class gPodder(BuilderWidget):
                 welcome_window.main_window.destroy()
 
             util.idle_add(show_welcome_window)
+    #RobL--^
 
     def download_episode_list_paused(self, episodes, hide_progress=False):
         self.download_episode_list(episodes, True, hide_progress=hide_progress)
@@ -3601,10 +3790,15 @@ class gPodder(BuilderWidget):
                 _config=self.config,
                 show_notification=False)
 
-    def on_itemDownloadAllNew_activate(self, action, param):
+    #RobL--v
+    # Formerly on_itemDownloadAllNew_activate - now on_download_new_episodes_all_podcasts
+    def on_download_new_episodes_all_podcasts(self, action, param):
+        """Downloads all new episodes for all podcasts."""
+
         if not self.offer_new_episodes():
             self.show_message(_('Please check for new episodes later.'),
                     _('No new episodes available'))
+    #RobL--^
 
     def get_new_episodes(self, channels=None):
         return [e for c in channels or self.channels for e in
@@ -3728,12 +3922,16 @@ class gPodder(BuilderWidget):
         self._add_podcast_dialog = gPodderAddPodcast(self.gPodder,
                 add_podcast_list=self.add_podcast_list)
 
-    def on_itemEditChannel_activate(self, action, param=None):
+    #RobL--v
+    # Formerly on_itemEditChannel_activate -- now on_show_podcast_settings   
+    def on_show_podcast_settings(self, *args):
+        """Shows the settings dialog for the currently selected podcast."""
+
         if self.active_channel is None:
             title = _('No podcast selected')
             message = _('Please select a podcast in the podcasts list to edit.')
             self.show_message(message, title, widget=self.treeChannels)
-            return
+            return False
 
         gPodderChannel(self.main_window,
                 channel=self.active_channel,
@@ -3742,8 +3940,12 @@ class gPodder(BuilderWidget):
                 sections={c.section for c in self.channels},
                 clear_cover_cache=self.podcast_list_model.clear_cover_cache,
                 _config=self.config)
+    #RobL--v
 
-    def on_itemMassUnsubscribe_activate(self, action, param):
+    #RobL--v
+    # Formerly on_itemMassUnsubscribe_activate -- now on_delete_multiple_podcasts
+    def on_delete_multiple_podcasts(self, action, param):
+        """Deletel multiple podcasts at once."""
         columns = (
             ('title_markup', None, None, _('Podcast')),
         )
@@ -3759,6 +3961,7 @@ class gPodder(BuilderWidget):
                 ok_button=_('_Delete'),
                 callback=self.remove_podcast_list,
                 _config=self.config)
+    #RobL--v
 
     def remove_podcast_list(self, channels, confirm=True):
         if not channels:
@@ -3854,7 +4057,9 @@ class gPodder(BuilderWidget):
             self.cover_downloader.replace_cover(self.active_channel, custom_url=False)
         # RobL--^
 
-    def on_itemRemoveChannel_activate(self, widget, *args):
+    # RobL--v
+    # Formerly on_itemRemoveChannel_activate -- now on_remove_selected_podcast
+    def on_remove_selected_podcast(self, action, param):
         if self.active_channel is None:
             title = _('No podcast selected')
             message = _('Please select a podcast in the podcasts list to remove.')
@@ -3862,6 +4067,7 @@ class gPodder(BuilderWidget):
             return
 
         self.remove_podcast_list([self.active_channel])
+    # RobL--^
 
     def get_opml_filter(self):
         flt = Gtk.FileFilter()
@@ -3985,10 +4191,10 @@ class gPodder(BuilderWidget):
         # double-click action of the podcast list or enter
         self.treeChannels.set_cursor(path)
 
-        # open channel settings
+        # show podcast settings
         channel = self.get_selected_channels()[0]
         if channel and not isinstance(channel, PodcastChannelProxy):
-            self.on_itemEditChannel_activate(None)
+            self.on_show_podcast_settings()
 
     def get_selected_channels(self):
         """Get a list of selected channels from treeChannels."""

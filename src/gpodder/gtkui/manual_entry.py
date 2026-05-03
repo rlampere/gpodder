@@ -56,6 +56,7 @@ Expected menu additions in share/gpodder/ui/gtk/menus.ui:
 
 import datetime as _dt
 import hashlib
+import logging
 import mimetypes
 import os
 import pathlib
@@ -66,6 +67,7 @@ import uuid
 
 import gpodder
 from gpodder import util
+from gpodder.gtkui.desktop import channel
 from gpodder.model import Model
 
 try:
@@ -82,6 +84,8 @@ gi.require_version('Gtk', '3.0')  # isort:skip
 from gi.repository import Gio, Gtk  # isort:skip
 
 _ = gpodder.gettext
+
+logger = logging.getLogger(__name__)
 
 
 class ManualEntryError(Exception):
@@ -228,7 +232,7 @@ class ManualPodcastDialog(Gtk.Dialog):
         )
         self.set_default_response(Gtk.ResponseType.OK)
         self.set_border_width(12)
-        self.set_default_size(560, 320)
+        self.set_default_size(720, 600)
 
         area = self.get_content_area()
         grid = Gtk.Grid(column_spacing=12, row_spacing=8, margin=12)
@@ -261,14 +265,16 @@ class ManualPodcastDialog(Gtk.Dialog):
         grid.attach(lbl, 0, row, 1, 1)
         grid.attach(desc_sw, 1, row, 1, 1)
 
+        # Check if a podcast was selected or if the "All episodes" list was selected.
         if podcast is not None:
             self.entry_title.set_text(podcast.title or '')
             self.entry_link.set_text(podcast.link or '')
             self.entry_section.set_text(getattr(podcast, 'section', '') or _('Other'))
             buf = self.text_description.get_buffer()
             buf.set_text((podcast.description or '').strip())
-
-        self.show_all()
+            self.show_all()
+        else:
+            logger.warning('No podcast selected -or- [All episodes] was selected...cannot edit podcast entry.')
 
     def get_data(self):
         buf = self.text_description.get_buffer()
@@ -610,9 +616,9 @@ class ManualEntryController(object):
         for name, callback in (
             ('manualAddPodcast', self.on_manual_add_podcast_activate),
             ('manualEditPodcast', self.on_manual_edit_podcast_activate),
-            ('manualAddEpisode', self.on_manual_add_episode_activate),
-            ('manualAddEpisodeBatch', self.on_manual_add_episode_batch_activate),
-            ('manualEditEpisode', self.on_manual_edit_episode_activate),
+            ('manualAddEpisodeSelectedPodcast', self.on_manual_add_episode_activate),
+            ('manualAddEpisodeBatchSelectedPodcast', self.on_manual_add_episode_batch_activate),
+            ('manualEditEpisodeSelectedPodcast', self.on_manual_edit_episode_activate),
         ):
             action = Gio.SimpleAction.new(name, None)
             action.connect('activate', callback)
@@ -648,10 +654,21 @@ class ManualEntryController(object):
     def open_manual_edit_podcast_dialog(self):
         podcast = getattr(self.ui, 'active_channel', None)
         if podcast is None:
-            self._show_error(_('No podcast selected'), _('Select a podcast first.'))
+            self._show_error(
+                _('No podcast selected'),
+                _('Select a podcast first.')
+            )
+            return
+
+        if getattr(podcast, 'ALL_EPISODES_PROXY', False):
+            self._show_error(
+                _('All Episodes list selected'),
+                _('Select a real podcast first.')
+            )
             return
 
         dialog = ManualPodcastDialog(self.ui.main_window, podcast=podcast)
+
         try:
             response = dialog.run()
             if response == Gtk.ResponseType.OK:
