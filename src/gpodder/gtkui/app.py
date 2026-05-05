@@ -184,7 +184,15 @@ class gPodderApplication(Gtk.Application):
         else:
             self.set_app_menu(self.app_menu)
 
-        Gtk.Window.set_default_icon_name('gpodder')
+        #RobL--^
+        #Gtk.Window.set_default_icon_name('gpodder+')  #RobL
+        try:
+            # Prefer explicit icon file path (works reliably in source/dev runs)
+            Gtk.Window.set_default_icon_from_file(gpodder.icon_file)
+        except Exception:
+            # Fallback to theme icon name for packaged/system installs
+            Gtk.Window.set_default_icon_name('gpodder')
+        #RobL--^
 
         # FIXME: we want to get rid of dbus dependency
         try:
@@ -196,7 +204,7 @@ class gPodderApplication(Gtk.Application):
             dlg = Gtk.MessageDialog(None, Gtk.DialogFlags.MODAL, Gtk.MessageType.ERROR,
                    Gtk.ButtonsType.CLOSE, _('Cannot start gPodder'))
             dlg.format_secondary_markup(_('D-Bus error: %s') % (str(dbe),))
-            dlg.set_title('gPodder')
+            dlg.set_title('gPodder+')  #RobL
             dlg.run()
             dlg.destroy()
             sys.exit(0)

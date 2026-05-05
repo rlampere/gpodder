@@ -62,6 +62,7 @@ import os
 import pathlib
 import re
 import shutil
+import threading
 import time
 import uuid
 
@@ -81,7 +82,7 @@ except Exception:  # pragma: no cover - optional dependency
 import gi  # isort:skip
 
 gi.require_version('Gtk', '3.0')  # isort:skip
-from gi.repository import Gio, Gtk  # isort:skip
+from gi.repository import Gio, GLib, Gtk  # isort:skip
 
 _ = gpodder.gettext
 
@@ -265,16 +266,14 @@ class ManualPodcastDialog(Gtk.Dialog):
         grid.attach(lbl, 0, row, 1, 1)
         grid.attach(desc_sw, 1, row, 1, 1)
 
-        # Check if a podcast was selected or if the "All episodes" list was selected.
-        if podcast is not None:
+        if is_edit:
             self.entry_title.set_text(podcast.title or '')
             self.entry_link.set_text(podcast.link or '')
             self.entry_section.set_text(getattr(podcast, 'section', '') or _('Other'))
             buf = self.text_description.get_buffer()
             buf.set_text((podcast.description or '').strip())
-            self.show_all()
-        else:
-            logger.warning('No podcast selected -or- [All episodes] was selected...cannot edit podcast entry.')
+
+        self.show_all()
 
     def get_data(self):
         buf = self.text_description.get_buffer()
@@ -441,6 +440,7 @@ class ManualEpisodeDialog(Gtk.Dialog):
             buf = self.text_description.get_buffer()
             buf.set_text(_episode_edit_description(episode).strip())
 
+        # Show the dialog after creating all the widgets and populating the fields.
         self.show_all()
 
     def get_selected_podcast(self):
@@ -528,6 +528,25 @@ class ManualBatchEpisodeDialog(Gtk.Dialog):
         self.check_use_tags = Gtk.CheckButton.new_with_label(_('Read title/comments from file tags when available'))
         self.check_use_tags.set_active(True)
 
+        # Create the "live batch status widgets that can be updated during the media file copy process.
+        self.progress = Gtk.ProgressBar()
+        self.progress.set_show_text(True)
+        self.progress.set_text(_('Ready'))
+
+        self.current_file_status = Gtk.Label(label=_('Current file: (none)'), xalign=0)
+
+        self.status_log_buffer = Gtk.TextBuffer()
+        self.status_log_view = Gtk.TextView.new_with_buffer(self.status_log_buffer)
+        self.status_log_view.set_editable(False)
+        self.status_log_view.set_cursor_visible(False)
+        self.status_log_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+
+        self.status_log_scroll = Gtk.ScrolledWindow()
+        self.status_log_scroll.set_min_content_height(120)
+        self.status_log_scroll.set_hexpand(True)
+        self.status_log_scroll.set_vexpand(True)
+        self.status_log_scroll.add(self.status_log_view)
+
         info = Gtk.Label(
             label=_(
                 'Batch Import Rules:\n'
@@ -560,6 +579,20 @@ class ManualBatchEpisodeDialog(Gtk.Dialog):
         row += 1
         grid.attach(info, 1, row, 1, 1)
 
+        # Add the live batch status widgets at the end so they show up below the form fields and can be updated during the import process.
+        row += 1
+        grid.attach(Gtk.Label(label=_('Progress'), xalign=0), 0, row, 1, 1)
+        grid.attach(self.progress, 1, row, 1, 1)
+
+        row += 1
+        grid.attach(Gtk.Label(label=_('Now adding'), xalign=0), 0, row, 1, 1)
+        grid.attach(self.current_file_status, 1, row, 1, 1)
+
+        row += 1
+        grid.attach(Gtk.Label(label=_('Status log'), xalign=0), 0, row, 1, 1)
+        grid.attach(self.status_log_scroll, 1, row, 1, 1)
+
+        # Show the dialog after creating all the widgets and populating the fields.
         self.show_all()
 
     def on_choose_batch_files_clicked(self, button):
@@ -604,6 +637,68 @@ class ManualBatchEpisodeDialog(Gtk.Dialog):
             'is_new': self.check_mark_new.get_active(),
             'use_file_tags': self.check_use_tags.get_active(),
         }
+
+    def append_status_log(self, line):
+        end_iter = self.status_log_buffer.get_end_iter()
+        self.status_log_buffer.insert(end_iter, line + '\n')
+        mark = self.status_log_buffer.create_mark(None, self.status_log_buffer.get_end_iter(), False)
+        self.status_log_view.scroll_to_mark(mark, 0.0, True, 0.0, 1.0)
+
+    def set_busy(self, busy):
+        area = self.get_content_area()
+        area.set_sensitive(not busy)
+        self.get_widget_for_response(Gtk.ResponseType.OK).set_sensitive(not busy)
+        self.get_widget_for_response(Gtk.ResponseType.CANCEL).set_sensitive(not busy)
+
+    def run_batch_with_progress(self, controller, podcast, media_files, is_new=True, use_file_tags=True):
+        total = len(media_files)
+        if total <= 0:
+            return []
+
+        self.progress.set_fraction(0.0)
+        self.progress.set_text(_('0/{total}').format(total=total))
+        self.current_file_status.set_text(_('Current file: (starting)'))
+        self.status_log_buffer.set_text('')
+        self.append_status_log(_('Starting batch import of {total} file(s)...').format(total=total))
+        self.set_busy(True)
+
+        result = {'created': [], 'errors': []}
+        done = threading.Event()
+
+        def on_progress(index, total_count, source, created_episode, error):
+            basename = os.path.basename(str(source))
+            frac = float(index) / float(total_count) if total_count else 0.0
+            self.progress.set_fraction(frac)
+            self.progress.set_text(_('{index}/{total}').format(index=index, total=total_count))
+            self.current_file_status.set_text(_('Current file: {name}').format(name=basename))
+            if error is None:
+                self.append_status_log(_('✅ Added: {name}').format(name=basename))
+            else:
+                self.append_status_log(_('❌ Failed: {name} — {err}').format(name=basename, err=str(error)))
+            return False
+
+        def worker():
+            created, errors = controller.add_manual_episode_batch(
+                podcast=podcast,
+                media_files=media_files,
+                is_new=is_new,
+                use_file_tags=use_file_tags,
+                on_progress=lambda *args: GLib.idle_add(on_progress, *args),
+            )
+            result['created'] = created
+            result['errors'] = errors
+            GLib.idle_add(done.set)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+        while not done.is_set():
+            Gtk.main_iteration_do(True)
+
+        self.set_busy(False)
+        self.append_status_log(_('Finished: {ok} added, {bad} failed').format(
+            ok=len(result['created']), bad=len(result['errors'])
+        ))
+        return result['created']
 
 
 class ManualEntryController(object):
@@ -714,7 +809,18 @@ class ManualEntryController(object):
         try:
             response = dialog.run()
             if response == Gtk.ResponseType.OK:
-                episodes = self.add_manual_episode_batch(**dialog.get_data())
+                #episodes = self.add_manual_episode_batch(**dialog.get_data())
+                #RobL--v--Update the controller to call the new dialog runner so it can call back
+                #         to update the progress widgets during the batch import process.
+                data = dialog.get_data()
+                episodes = dialog.run_batch_with_progress(
+                    controller=self,
+                    podcast=data['podcast'],
+                    media_files=data['media_files'],
+                    is_new=data['is_new'],
+                    use_file_tags=data['use_file_tags'],
+                )
+                #RobL--^
                 if episodes:
                     self._refresh_ui_after_episode_change(episodes[0])
         except Exception as exc:
@@ -836,49 +942,71 @@ class ManualEntryController(object):
         podcast.save()
         return episode
 
-    def add_manual_episode_batch(self, podcast, media_files, is_new=True, use_file_tags=True):
+    def add_manual_episode_batch(self, podcast, media_files, is_new=True, use_file_tags=True, on_progress=None):
         if podcast is None:
             raise ManualEntryError(_('A podcast must be selected.'))
         if not media_files:
             raise ManualEntryError(_('Select one or more media files.'))
 
         created = []
-        for media_file in media_files:
+        errors = []
+        total = len(media_files)
+
+        # Iterate through the media files to add, and add them as episodes.
+        for idx, media_file in enumerate(media_files, start=1):
+
             source = pathlib.Path(media_file).expanduser().resolve()
             if not source.exists() or not source.is_file():
-                raise ManualEntryError(_('Selected media file was not found: {}').format(source))
+                err = ManualEntryError(_('Selected media file was not found: {}').format(source))
+                errors.append((str(source), err))
+                if on_progress:
+                    on_progress(idx, total, source, None, err)
+                continue
 
-            metadata = _extract_media_metadata(source) if use_file_tags else {
-                'title': source.stem,
-                'description': '',
-                'published': int(source.stat().st_mtime),
-                'media_file': str(source),
-            }
+            try:
+                metadata = _extract_media_metadata(source) if use_file_tags else {
+                    'title': source.stem,
+                    'description': '',
+                    'published': int(source.stat().st_mtime),
+                    'media_file': str(source),
+                }
 
-            episode = podcast.EpisodeClass(podcast)
-            self._apply_episode_fields(
-                episode,
-                podcast=podcast,
-                title=metadata['title'],
-                published=int(metadata['published']),
-                link='',
-                guid='',
-                season_num=0,
-                episode_num=0,
-                is_new=is_new,
-                description=metadata['description'],
-                media_source=source,
-                replace_media=True,
-                is_new_record=True,
-            )
-            episode.save()
-            self._ensure_episode_in_channel_list(episode)
-            created.append(episode)
+                episode = podcast.EpisodeClass(podcast)
+                self._apply_episode_fields(
+                    episode,
+                    podcast=podcast,
+                    title=metadata['title'],
+                    published=int(metadata['published']),
+                    link='',
+                    guid='',
+                    season_num=0,
+                    episode_num=0,
+                    is_new=is_new,
+                    description=metadata['description'],
+                    media_source=source,
+                    replace_media=True,
+                    is_new_record=True,
+                )
 
+                episode.save()
+                self._ensure_episode_in_channel_list(episode)
+                created.append(episode)
+
+                if on_progress:
+                    on_progress(idx, total, source, episode, None)
+
+            except Exception as exc:
+                errors.append((str(source), exc))
+                if on_progress:
+                    on_progress(idx, total, source, None, exc)
+                continue
+
+        # Update the podcast after all episodes have been added.
         if hasattr(podcast, '_determine_common_prefix'):
             podcast._determine_common_prefix()
         podcast.save()
-        return created
+
+        return created, errors
 
     def update_manual_episode(self, episode, podcast, title, media_file, replace_media,
                               published_text, link='', guid='', season_num=0, episode_num=0,
