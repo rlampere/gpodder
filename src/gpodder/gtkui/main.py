@@ -469,7 +469,7 @@ class gPodder(BuilderWidget):
             # Podcasts - actions for managing EXISTING podacasts
             # --------------------------------------------------
             # Actions applied to the SELECTED PODCAST.
-            ('showPodcastSettings', self.on_show_podcast_settings),                                     #RobL
+            ('showPodcastDetails', self.on_show_podcast_details),                                       #RobL
             ('updateSelectedPodcast', self.on_update_selected_podcast),                                 #RobL
             ('findEpisodeSelectedPodcast', self.on_find_episode_selected_podcast),                      #RobL
             # 'Edit podcast settings' - defined in manual_entry_controller below                        #RobL
@@ -550,7 +550,7 @@ class gPodder(BuilderWidget):
         # Podcasts
         self.update_action = g.lookup_action('checkForNewEpisodesAllPodcasts')  #RobL - Formerly 'update'
         self.update_channel_action = g.lookup_action('updateAllPodcasts')       #RobL - Formerly 'updateChannel'
-        self.edit_channel_action = g.lookup_action('showPodcastSettings')       #RobL - Formerly 'editChannel'
+        self.edit_channel_action = g.lookup_action('showPodcastDetails')        #RobL - Formerly 'editChannel'
         # Episodes
         self.play_action = g.lookup_action('play')
         self.open_action = g.lookup_action('open')
@@ -1142,7 +1142,7 @@ class gPodder(BuilderWidget):
         namecolumn.add_attribute(iconcell, 'icon-name', EpisodeListModel.C_STATUS_ICON)
         namecolumn.pack_start(namecell, True)
         namecolumn.add_attribute(namecell, 'markup', EpisodeListModel.C_DESCRIPTION)
-        namecolumn.set_sort_column_id(EpisodeListModel.C_DESCRIPTION)
+        namecolumn.set_sort_column_id(EpisodeListModel.C_TITLE)  #RobL - Formerly C_DESCRIPTION
         namecolumn.set_sizing(Gtk.TreeViewColumnSizing.AUTOSIZE)
         namecolumn.set_resizable(True)
         namecolumn.set_expand(True)
@@ -3923,9 +3923,9 @@ class gPodder(BuilderWidget):
                 add_podcast_list=self.add_podcast_list)
 
     #RobL--v
-    # Formerly on_itemEditChannel_activate -- now on_show_podcast_settings   
-    def on_show_podcast_settings(self, *args):
-        """Shows the settings dialog for the currently selected podcast."""
+    # Formerly on_itemEditChannel_activate -- now on_show_podcast_details
+    def on_show_podcast_details(self, *args):
+        """Shows details for the currently selected podcast."""
 
         if self.active_channel is None:
             title = _('No podcast selected')
@@ -3945,7 +3945,7 @@ class gPodder(BuilderWidget):
     #RobL--v
     # Formerly on_itemMassUnsubscribe_activate -- now on_delete_multiple_podcasts
     def on_delete_multiple_podcasts(self, action, param):
-        """Deletel multiple podcasts at once."""
+        """Deletes multiple selected podcasts at once."""
         columns = (
             ('title_markup', None, None, _('Podcast')),
         )
@@ -3954,7 +3954,7 @@ class gPodder(BuilderWidget):
         # but it works and looks good, so why not? -- thp
         gPodderEpisodeSelector(self.main_window,
                 title=_('Delete podcasts'),
-                instructions=_('Select the podcast you want to delete.'),
+                instructions=_('Select the podcast(s) you want to delete.'),
                 episodes=self.channels,
                 columns=columns,
                 size_attribute=None,
@@ -4191,10 +4191,10 @@ class gPodder(BuilderWidget):
         # double-click action of the podcast list or enter
         self.treeChannels.set_cursor(path)
 
-        # show podcast settings
+        # show podcast details
         channel = self.get_selected_channels()[0]
         if channel and not isinstance(channel, PodcastChannelProxy):
-            self.on_show_podcast_settings()
+            self.on_show_podcast_details()  #RobL
 
     def get_selected_channels(self):
         """Get a list of selected channels from treeChannels."""

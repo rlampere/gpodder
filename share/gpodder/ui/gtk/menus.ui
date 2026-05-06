@@ -50,73 +50,73 @@
             <attribute name="label" translatable="yes">_Podcast</attribute>
             <section>
                 <item>
-                    <attribute name="action">win.showPodcastSettings</attribute>
-                    <attribute name="label" translatable="yes">Show podcast settings</attribute>
+                    <attribute name="action">win.showPodcastDetails</attribute>
+                    <attribute name="label" translatable="yes">Podcast Details...</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.updateSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Update podcast</attribute>
+                    <attribute name="label" translatable="yes">Update Selected Podcast</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.findEpisodeSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Find episode</attribute>
+                    <attribute name="label" translatable="yes">Find Episode</attribute>
                     <attribute name="accel">&lt;Primary&gt;f</attribute>
                 </item>
             </section>
             <section>
                 <item>
                     <attribute name="action">win.manualEditPodcast</attribute>
-                    <attribute name="label" translatable="yes">Edit podcast settings</attribute>
+                    <attribute name="label" translatable="yes">Edit Podcast Settings...</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.manualAddPodcast</attribute>
-                    <attribute name="label" translatable="yes">Add new podcast manually</attribute>
+                    <attribute name="label" translatable="yes">Add New Podcast (manually)...</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.manualAddEpisodeSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Add new episode manually</attribute>
+                    <attribute name="label" translatable="yes">Add New Episode (manually)...</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.manualAddEpisodeBatchSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Add multiple episodes manually</attribute>
+                    <attribute name="label" translatable="yes">Add Multiple Episodes (manually)...</attribute>
                 </item>
             </section>
             <section>
                 <item>
                     <attribute name="action">win.markEpisodesOldNewSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Mark all episodes new/old</attribute>
+                    <attribute name="label" translatable="yes">Toggle All Episodes New/Old</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.archiveEpisodesSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Archive all episodes</attribute>
+                    <attribute name="label" translatable="yes">Archive All Episodes</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.undeleteEpisodesSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Restore deleted episodes</attribute>
+                    <attribute name="label" translatable="yes">Restore Deleted Episodes</attribute>
                 </item>
             </section>
             <section>
                 <item>
                     <attribute name="action">win.removeSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Delete podcast</attribute>
+                    <attribute name="label" translatable="yes">Delete Podcast</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.removeDeletedEpisodesSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Remove deleted episodes</attribute>
+                    <attribute name="label" translatable="yes">Remove Deleted Episodes</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.deletedExpiredEpisodesSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Remove deleted episodes</attribute>
+                    <attribute name="label" translatable="yes">Remove Expired Episodes</attribute>
                 </item>
             </section>
             <section>
                 <item>
                     <attribute name="action">win.openChannelDownloadFolder</attribute>
-                    <attribute name="label" translatable="yes">Open download folder</attribute>
+                    <attribute name="label" translatable="yes">Open Download Folder</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.refreshImage</attribute>
-                    <attribute name="label" translatable="yes">Refresh podcast image</attribute>
+                    <attribute name="label" translatable="yes">Refresh Podcast Image</attribute>
                 </item>
             </section>
         </submenu>
@@ -155,33 +155,33 @@
             <section>
                 <item>
                     <attribute name="action">win.toggleEpisodeNew</attribute>
-                    <attribute name="label" translatable="yes">Toggle new/old status</attribute>
+                    <attribute name="label" translatable="yes">Toggle Episode Status (new/old)</attribute>
                     <attribute name="accel">&lt;Primary&gt;e</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.toggleEpisodeLock</attribute>
-                    <attribute name="label" translatable="yes">Toggle lock/unlock</attribute>
+                    <attribute name="label" translatable="yes">Toggle Archive Flag (lock/unlock)</attribute>
                 </item>
             </section>
             <section>
                 <item>
                     <attribute name="action">win.openEpisodeDownloadFolder</attribute>
-                    <attribute name="label" translatable="yes">Open download folder</attribute>
+                    <attribute name="label" translatable="yes">Open Download Folder</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.selectChannel</attribute>
-                    <attribute name="label" translatable="yes">Select associated podcast</attribute>
+                    <attribute name="label" translatable="yes">Highlight Associated Podcast</attribute>
                 </item>
             </section>
             <section>
                 <item>
                     <attribute name="action">win.findEpisode</attribute>
-                    <attribute name="label" translatable="yes">Find episode</attribute>
+                    <attribute name="label" translatable="yes">Find Episode</attribute>
                     <attribute name="accel">&lt;Primary&gt;f</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.toggleShownotes</attribute>
-                    <attribute name="label" translatable="yes">Show/hide episode details</attribute>
+                    <attribute name="label" translatable="yes">Toggle Episode Details (show/hide)</attribute>
                 </item>
             </section>
         </submenu>
@@ -193,38 +193,38 @@
             <section>
                 <item>
                     <attribute name="action">win.checkForNewEpisodesAllPodcasts</attribute>
-                    <attribute name="label" translatable="yes">Check for new episodes</attribute>
+                    <attribute name="label" translatable="yes">Check for New Episodes</attribute>
                     <attribute name="accel">&lt;Primary&gt;r</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.downloadNewEpisodesAllPodcasts</attribute>
-                    <attribute name="label" translatable="yes">Download new episodes</attribute>
+                    <attribute name="label" translatable="yes">Download New Episodes</attribute>
                     <attribute name="accel">&lt;Primary&gt;n</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.updateAllPodcasts</attribute>
-                    <attribute name="label" translatable="yes">Update podcasts</attribute>
+                    <attribute name="label" translatable="yes">Update Podcasts</attribute>
                 </item>
             </section>
             <section>
                 <item>
                     <attribute name="action">win.deleteExpiredEpisodesAllPodcasts</attribute>
-                    <attribute name="label" translatable="yes">Delete expired episodes</attribute>
+                    <attribute name="label" translatable="yes">Delete Expired Episodes</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.deleteOldEpisodesAllPodcasts</attribute>
-                    <attribute name="label" translatable="yes">Delete old episodes...</attribute>
+                    <attribute name="label" translatable="yes">Delete Old Episodes...</attribute>
                     <attribute name="accel">&lt;Primary&gt;k</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.deleteMultiplePodcasts</attribute>
-                    <attribute name="label" translatable="yes">Delete podcasts...</attribute>
+                    <attribute name="label" translatable="yes">Delete Podcasts...</attribute>
                 </item>
             </section>
             <section>
                 <item>
                     <attribute name="action">win.findPodcast</attribute>
-                    <attribute name="label" translatable="yes">Find podcast</attribute>
+                    <attribute name="label" translatable="yes">Find Podcast</attribute>
                     <attribute name="accel">&lt;Primary&gt;&lt;Shift&gt;f</attribute>
                 </item>
             </section>
@@ -237,22 +237,22 @@
             <section>
                 <item>
                     <attribute name="action">win.discover</attribute>
-                    <attribute name="label" translatable="yes">Discover new podcasts</attribute>
+                    <attribute name="label" translatable="yes">Discover New Podcasts...</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.addChannel</attribute>
-                    <attribute name="label" translatable="yes">Add podcast via URL</attribute>
+                    <attribute name="label" translatable="yes">Add Podcast via URL...</attribute>
                     <attribute name="accel">&lt;Primary&gt;l</attribute>
                 </item>
             </section>
             <section>
                 <item>
                     <attribute name="action">win.importFromFile</attribute>
-                    <attribute name="label" translatable="yes">Import from OPML file</attribute>
+                    <attribute name="label" translatable="yes">Import from OPML File...</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.exportChannels</attribute>
-                    <attribute name="label" translatable="yes">Export to OPML file</attribute>
+                    <attribute name="label" translatable="yes">Export to OPML File...</attribute>
                 </item>
             </section>
         </submenu>
@@ -263,7 +263,7 @@
             <attribute name="label" translatable="yes">E_xtras</attribute>
             <item>
                 <attribute name="action">win.sync</attribute>
-                <attribute name="label" translatable="yes">Sync to device</attribute>
+                <attribute name="label" translatable="yes">Sync to Device...</attribute>
                 <attribute name="accel">&lt;Primary&gt;s</attribute>
             </item>
         </submenu>
@@ -340,7 +340,7 @@
                 <item>
                     <!-- Also in 'vbox_view' page in preferences -->
                     <attribute name="action">win.viewShowEpisodeDescription</attribute>
-                    <attribute name="label" translatable="yes">Episode descriptions</attribute>
+                    <attribute name="label" translatable="yes">Show episode descriptions</attribute>
                     <attribute name="accel">&lt;Primary&gt;d</attribute>
                 </item>
                 <item>
@@ -368,86 +368,86 @@
         <section>
             <attribute name="display-hint">horizontal-buttons</attribute>
             <item>
-                <attribute name="action">win.showPodcastSettings</attribute>
-                <attribute name="label" translatable="yes">Show podcast settings</attribute>
+                <attribute name="action">win.showPodcastDetails</attribute>
+                <attribute name="label" translatable="yes">Podcast Details...</attribute>
                 <attribute name="verb-icon">preferences-other-symbolic</attribute>
             </item>
             <item>
                 <attribute name="action">win.updateSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Update podcast</attribute>
+                <attribute name="label" translatable="yes">Update Podcast</attribute>
                 <attribute name="verb-icon">view-refresh-symbolic</attribute>
             </item>
             <item>
                 <attribute name="action">win.removeSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Delete podcast</attribute>
+                <attribute name="label" translatable="yes">Delete Podcast</attribute>
                 <attribute name="verb-icon">edit-delete-symbolic</attribute>
             </item>
         </section>
         <section>
             <item>
-                <attribute name="action">win.showPodcastSettings</attribute>
-                <attribute name="label" translatable="yes">Show podcast settings</attribute>
+                <attribute name="action">win.showPodcastDetails</attribute>
+                <attribute name="label" translatable="yes">Podcast Details...</attribute>
             </item>
             <item>
                 <attribute name="action">win.updateSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Update podcast</attribute>
+                <attribute name="label" translatable="yes">Update Podcast</attribute>
             </item>
             <item>
                 <attribute name="action">win.removeSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Delete podcast</attribute>
+                <attribute name="label" translatable="yes">Delete Podcast</attribute>
             </item>
         </section>
         <section>
             <item>
                 <attribute name="action">win.findEpisodeSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Find episode</attribute>
+                <attribute name="label" translatable="yes">Find Episode</attribute>
                 <attribute name="accel">&lt;Primary&gt;f</attribute>
             </item>
         </section>
         <section>
             <item>
                 <attribute name="action">win.manualEditPodcast</attribute>
-                <attribute name="label" translatable="yes">Edit podcast settings</attribute>
+                <attribute name="label" translatable="yes">Edit Podcast Settings...</attribute>
             </item>
             <item>
                 <attribute name="action">win.manualAddEpisodeSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Add new episode manually</attribute>
+                <attribute name="label" translatable="yes">Add New Episode (manually)...</attribute>
             </item>
             <item>
                 <attribute name="action">win.manualAddEpisodeBatchSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Add multiple episodes manually</attribute>
+                <attribute name="label" translatable="yes">Add Multiple Episodes (manually)...</attribute>
             </item>
         </section>
         <section>
             <item>
                 <attribute name="action">win.markEpisodesOldNewSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Mark all episodes new/old</attribute>
+                <attribute name="label" translatable="yes">Toggle All Episodes New/Old</attribute>
             </item>
             <item>
                 <attribute name="action">win.archiveEpisodesSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Archive all episodes</attribute>
+                <attribute name="label" translatable="yes">Archive All Episodes</attribute>
             </item>
             <item>
                 <attribute name="action">win.undeleteEpisodesSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Restore deleted episodes</attribute>
+                <attribute name="label" translatable="yes">Restore Deleted Episodes</attribute>
             </item>
             <item>
                 <attribute name="action">win.removeDeletedEpisodesSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Remove deleted episodes</attribute>
+                <attribute name="label" translatable="yes">Remove Deleted Episodes</attribute>
             </item>
             <item>
                 <attribute name="action">win.deletedExpiredEpisodesSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Remove deleted episodes</attribute>
+                <attribute name="label" translatable="yes">Remove Expired Episodes</attribute>
             </item>
         </section>
         <section>
             <item>
                 <attribute name="action">win.openChannelDownloadFolder</attribute>
-                <attribute name="label" translatable="yes">Open download folder</attribute>
+                <attribute name="label" translatable="yes">Open Download Folder</attribute>
             </item>
             <item>
                 <attribute name="action">win.refreshImage</attribute>
-                <attribute name="label" translatable="yes">Refresh podcast image</attribute>
+                <attribute name="label" translatable="yes">Refresh Podcast Image</attribute>
             </item>
         </section>
         <!-- Extensions -->
@@ -501,19 +501,19 @@
         <section>
             <item>
                 <attribute name="action">win.manualEditEpisodeSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Edit episode</attribute>
+                <attribute name="label" translatable="yes">Edit Episode</attribute>
             </item>
             <item>
                 <attribute name="action">win.toggleShownotes</attribute>
-                <attribute name="label" translatable="yes">Show/hide episode details</attribute>
+                <attribute name="label" translatable="yes">Toggle Episode Details (show/hide)</attribute>
             </item>
             <item>
                 <attribute name="action">win.openEpisodeDownloadFolder</attribute>
-                <attribute name="label" translatable="yes">Open download folder</attribute>
+                <attribute name="label" translatable="yes">Open Download Folder</attribute>
             </item>
             <item>
                 <attribute name="action">win.selectChannel</attribute>
-                <attribute name="label" translatable="yes">Select associated podcast</attribute>
+                <attribute name="label" translatable="yes">Highlight Associated Podcast</attribute>
             </item>
         </section>
     </menu>
@@ -523,11 +523,11 @@
         <!-- ======================================== -->
         <item>
             <attribute name="action">win.saveEpisodes</attribute>
-            <attribute name="label" translatable="yes">Local folder</attribute>
+            <attribute name="label" translatable="yes">Local Folder</attribute>
         </item>
         <item>
             <attribute name="action">win.bluetoothEpisodes</attribute>
-            <attribute name="label" translatable="yes">Bluetooth device</attribute>
+            <attribute name="label" translatable="yes">Bluetooth Device</attribute>
         </item>
     </menu>
     <!-- =============================== -->
@@ -538,7 +538,7 @@
             <attribute name="display-hint">horizontal-buttons</attribute>
             <item>
                 <attribute name="action">win.forceDownload</attribute>
-                <attribute name="label" translatable="yes">Start download now</attribute>
+                <attribute name="label" translatable="yes">Start Download Now</attribute>
                 <attribute name="verb-icon">document-save-symbolic</attribute>
             </item>
             <item>
@@ -555,7 +555,7 @@
         <section>
             <item>
                 <attribute name="action">win.download</attribute>
-                <attribute name="label" translatable="yes">Start download now</attribute>
+                <attribute name="label" translatable="yes">Start Download Now</attribute>
             </item>
             <item>
                 <attribute name="action">win.pause</attribute>
@@ -569,17 +569,17 @@
         <section>
             <item>
                 <attribute name="action">win.moveUp</attribute>
-                <attribute name="label" translatable="yes">Move up</attribute>
+                <attribute name="label" translatable="yes">Move Up</attribute>
             </item>
             <item>
                 <attribute name="action">win.moveDown</attribute>
-                <attribute name="label" translatable="yes">Move down</attribute>
+                <attribute name="label" translatable="yes">Move Down</attribute>
             </item>
         </section>
         <section>
             <item>
                 <attribute name="action">win.remove</attribute>
-                <attribute name="label" translatable="yes">Remove from list</attribute>
+                <attribute name="label" translatable="yes">Remove From List</attribute>
             </item>
         </section>
     </menu>
