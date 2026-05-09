@@ -129,6 +129,12 @@ class gPodder(BuilderWidget):
         self.main_window.show()
 
         #RobL--v
+        # Load a customer CSS stylesheet to improve the visibility of the
+        # selected row in the treeviews, especially in dark themes.
+        self.load_custom_gtk_css()
+        #RobL--^
+
+        #RobL--v
         # Show a progress indicator during startup.
         debug_pause=0.0  # Set to 0 to disable the artificial pause.
         self.startup_indicator = ProgressIndicator(
@@ -665,7 +671,6 @@ class gPodder(BuilderWidget):
         return False
     #RobL--^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^---
 
-
     #RobL--vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv---
     # Added this method to defer the check of download folders until after the
     # UI has started, to avoid blocking startup with potentially long-running
@@ -718,6 +723,37 @@ class gPodder(BuilderWidget):
 
         util.run_in_background(worker)
         return False
+    #RobL--^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^---
+
+    #RobL--vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv---
+    # Loads a custom CSS stylesheet to style the selected row in the treeviews,
+    # since the default selection styling is not very visible in the dark theme.
+    # This is done by creating a Gtk.CssProvider, loading the CSS from a byte
+    # string, and adding it to the default screen's style context with application
+    # priority.
+    def load_custom_gtk_css(self):
+        css = b"""
+        #podcast-list.view:selected,
+        #podcast-list.view:selected:focus {
+            background-color: #98DFF0;
+            color: #000000;
+        }
+
+        #podcast-list.view:selected:hover,
+        #podcast-list.view:selected:focus:hover {
+            background-color: #48C5E5;
+            color: #000000;
+        }
+        """
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(css)
+
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(),
+            provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
     #RobL--^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^---
 
     def in_downloads_list(self):
@@ -923,9 +959,32 @@ class gPodder(BuilderWidget):
     def init_podcast_list_treeview(self):
         size = cake_size_from_widget(self.treeChannels) * 2
         scale = self.treeChannels.get_scale_factor()
+        self.treeChannels.set_name('podcast-list')  #RobL
         self.podcast_list_model.set_max_image_size(size, scale)
         # Set up podcast channel tree view widget
         column = Gtk.TreeViewColumn('')
+
+        #RobL--v
+        # Helper function to set the background color of a podcast name cell based on the value in the model.
+        def set_podcast_namecell_background(column, cell, tree_model, tree_iter, data=None):
+            # treeChannels uses a GtkTreeModelFilter, so convert the filtered iter
+            # back to the underlying PodcastListModel iter before reading columns.
+            child_model = tree_model
+            child_iter = tree_iter
+
+            if hasattr(tree_model, 'convert_iter_to_child_iter'):
+                child_iter = tree_model.convert_iter_to_child_iter(tree_iter)
+                child_model = tree_model.get_model()
+
+            background = child_model.get_value(child_iter, PodcastListModel.C_BACKGROUND)
+
+            if background:
+                cell.set_property('cell-background', background)
+                cell.set_property('cell-background-set', True)
+            else:
+                cell.set_property('cell-background-set', False)
+        #RobL--^
+
         iconcell = Gtk.CellRendererPixbuf()
         iconcell.set_property('width', size + 10)
         column.pack_start(iconcell, False)
@@ -938,6 +997,7 @@ class gPodder(BuilderWidget):
         namecell.set_property('ellipsize', Pango.EllipsizeMode.END)
         column.pack_start(namecell, True)
         column.add_attribute(namecell, 'markup', PodcastListModel.C_DESCRIPTION)
+        column.set_cell_data_func(namecell, set_podcast_namecell_background)  #RobL
 
         iconcell = Gtk.CellRendererPixbuf()
         iconcell.set_property('xalign', 1.0)

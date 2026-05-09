@@ -575,7 +575,7 @@ class PodcastListModel(Gtk.ListStore):
         C_COVER, C_ERROR, C_PILL_VISIBLE, \
         C_VIEW_SHOW_UNDELETED, C_VIEW_SHOW_DOWNLOADED, \
         C_VIEW_SHOW_UNPLAYED, C_HAS_EPISODES, C_SEPARATOR, \
-        C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION = list(range(16))
+        C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND = list(range(17))  #RobL
 
     SEARCH_COLUMNS = (C_TITLE, C_DESCRIPTION, C_SECTION)
     SEARCH_ATTRS = ('title', 'description', 'group_by')
@@ -587,7 +587,7 @@ class PodcastListModel(Gtk.ListStore):
     def __init__(self, cover_downloader):
         Gtk.ListStore.__init__(self, str, str, str, GdkPixbuf.Pixbuf,
                 object, GdkPixbuf.Pixbuf, str, bool, bool, bool, bool,
-                bool, bool, int, bool, str)
+                bool, bool, int, bool, str, str)  #RobL
 
         # Filter to allow hiding some episodes
         self._filter = self.filter_new()
@@ -844,8 +844,8 @@ class PodcastListModel(Gtk.ListStore):
                     True, True,
                     # C_VIEW_SHOW_UNPLAYED, C_HAS_EPISODES, C_SEPARATOR
                     True, True, False,
-                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION
-                    0, True, '')
+                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND  #RobL
+                    0, True, '', '')                                         #RobL
 
         def section_to_row(section):
             # C_URL, C_TITLE, C_DESCRIPTION, C_PILL, C_CHANNEL
@@ -856,8 +856,8 @@ class PodcastListModel(Gtk.ListStore):
                     True, True,
                     # C_VIEW_SHOW_UNPLAYED, C_HAS_EPISODES, C_SEPARATOR
                     True, True, False,
-                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION
-                    0, False, section.title)
+                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND  #RobL
+                    0, False, section.title, '#136E85')                      #RobL - dark blue for sections
 
         if config.ui.gtk.podcast_list.all_episodes and channels:
             all_episodes = PodcastChannelProxy(db, config, channels, '', self)
@@ -867,7 +867,7 @@ class PodcastListModel(Gtk.ListStore):
             # Separator item
             if not config.ui.gtk.podcast_list.sections:
                 self.append(('', '', '', None, SeparatorMarker, None, '',
-                    True, True, True, True, True, True, 0, False, ''))
+                    True, True, True, True, True, True, 0, False, '', ''))   #RobL
 
         def groupby_func(channel):
             return channel.group_by
@@ -952,7 +952,7 @@ class PodcastListModel(Gtk.ListStore):
 
             # We could customized the section header here with the list
             # of channels and their stats (i.e. add some "new" indicator)
-            description = '<b>%s</b>' % (
+            description = '<span foreground="white"><b>%s</b></span>' % (
                     html.escape(section))
             pill_image = None
             cover_image = None
