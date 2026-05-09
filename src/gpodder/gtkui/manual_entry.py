@@ -84,6 +84,10 @@ import gi  # isort:skip
 gi.require_version('Gtk', '3.0')  # isort:skip
 from gi.repository import Gio, GLib, Gtk  # isort:skip
 
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
+
 _ = gpodder.gettext
 
 logger = logging.getLogger(__name__)
@@ -93,6 +97,8 @@ class ManualEntryError(Exception):
     pass
 
 #RobL--v
+# Utility function to get the appropriate description text for an episode to show
+# in the manual episode editor dialog.
 def _episode_edit_description(episode):
     """Return the description text to show in the manual episode editor.
 
@@ -110,10 +116,60 @@ def _episode_edit_description(episode):
         return episode.description
 
     return ''
+#RobL--^
 
+#RobL--v
+# Utility function to determine if episode description should be saved as HTML
+# or plain text.
 def _episode_edit_description_is_html(episode):
     """Return True if the manual episode editor should save description as HTML."""
     return bool(episode is not None and episode.description_html)
+#RobL--^
+
+#RobL--v
+# Utility function to display a confirmation message box to the user.
+def _ask_yes_no(parent, title, message):
+    dialog = Gtk.MessageDialog(
+        transient_for=parent,
+        modal=True,
+        message_type=Gtk.MessageType.QUESTION,
+        buttons=Gtk.ButtonsType.YES_NO,
+        text=title,
+    )
+
+    dialog.format_secondary_text(message)
+
+    response = dialog.run()
+    dialog.destroy()
+
+    return response == Gtk.ResponseType.YES
+#RobL--^
+
+#RobL--v
+# Utility function to check if a given URL is reachable by making a HEAD request
+# with a timeout. If the URL starts with "manual:" or is reachable (returns a
+# 2xx or 3xx status code) return True.
+def _is_url_reachable(url, timeout=10):
+    url = (url or '').strip()
+
+    if url.startswith("manual:"):
+        return True
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+        return False
+
+    try:
+        request = Request(
+            url,
+            headers={'User-Agent': 'gPodder+'}
+        )
+
+        with urlopen(request, timeout=timeout) as response:
+            return 200 <= response.status < 400
+
+    except (URLError, HTTPError, TimeoutError):
+        return False
 #RobL--^
 
 def _slugify(value):
@@ -239,48 +295,69 @@ class ManualPodcastDialog(Gtk.Dialog):
         grid = Gtk.Grid(column_spacing=12, row_spacing=8, margin=12)
         area.add(grid)
 
-        self.entry_title = Gtk.Entry()
-        self.entry_title.set_activates_default(True)
-        self.entry_link = Gtk.Entry()
-        self.entry_link.set_placeholder_text('https://example.com')
-        self.entry_section = Gtk.Entry()
-        self.entry_section.set_text(_('Other'))
-        self.text_description = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD)
-        desc_sw = Gtk.ScrolledWindow()
-        desc_sw.set_hexpand(True)
-        desc_sw.set_vexpand(True)
-        desc_sw.add(self.text_description)
+        # Add a field for podcast title.
+        self.podcast_title_entry = Gtk.Entry()
+        self.podcast_title_entry.set_activates_default(True)
 
+        # Add a field for the feed URL - allows users to set a custom URL.
+        self.podcast_feed_url_entry = Gtk.Entry()
+        self.podcast_feed_url_entry.set_hexpand(True)
+
+        # Add a field for the podcast's website link.
+        self.podcast_website_link_entry = Gtk.Entry()
+        self.podcast_website_link_entry.set_placeholder_text('https://example.com')
+
+        # Add a field for the podcast display section - use Other as the default.
+        self.podcast_section_entry = Gtk.Entry()
+        self.podcast_section_entry.set_text(_('Other'))
+
+        # Add a scrollable window for the podcast description.
+        self.podcast_description = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD)
+        podcast_desc_sw = Gtk.ScrolledWindow()
+        podcast_desc_sw.set_hexpand(True)
+        podcast_desc_sw.set_vexpand(True)
+        podcast_desc_sw.add(self.podcast_description)
+
+        # Loop through the fields and add them to the grid with labels in the
+        # first column and widgets in the second column.
         row = 0
         for label, widget in (
-            (_('Title'), self.entry_title),
-            (_('Website link'), self.entry_link),
-            (_('Section'), self.entry_section),
+            (_('Title'), self.podcast_title_entry),
+            (_('Feed URL'), self.podcast_feed_url_entry),
+            (_('Website Link'), self.podcast_website_link_entry),
+            (_('Section'), self.podcast_section_entry),
+            (_('Description'), podcast_desc_sw),
         ):
             lbl = Gtk.Label(label=label, xalign=0)
             grid.attach(lbl, 0, row, 1, 1)
             grid.attach(widget, 1, row, 1, 1)
             row += 1
 
-        lbl = Gtk.Label(label=_('Description'), xalign=0)
-        grid.attach(lbl, 0, row, 1, 1)
-        grid.attach(desc_sw, 1, row, 1, 1)
-
+        # If editing an existing podcast, populate the fields with the current data
+        # otherwise leave them blank for the user to fill in.
         if is_edit:
-            self.entry_title.set_text(podcast.title or '')
-            self.entry_link.set_text(podcast.link or '')
-            self.entry_section.set_text(getattr(podcast, 'section', '') or _('Other'))
-            buf = self.text_description.get_buffer()
+            self.podcast_title_entry.set_text(podcast.title or '')
+            self.podcast_feed_url_entry.set_text(podcast.url or '')
+            self.podcast_website_link_entry.set_text(podcast.link or '')
+            self.podcast_section_entry.set_text(getattr(podcast, 'section', '') or _('Other'))
+            buf = self.podcast_description.get_buffer()
             buf.set_text((podcast.description or '').strip())
+            # Debug - display some of the podcast attributes to troubleshoot.
+            #logger.warning('podcast title: %s', getattr(podcast, 'title', None))
+            #logger.warning('podcast.url: %s', getattr(podcast, 'url', None))
+            #logger.warning('podcast.link: %s', getattr(podcast, 'link', None))
+            #logger.warning('podcast.cover_file: %s', getattr(podcast, 'cover_file', None))
+            #logger.warning('podcast.cover_url: %s', getattr(podcast, 'cover_url', None))
 
         self.show_all()
 
     def get_data(self):
-        buf = self.text_description.get_buffer()
+        buf = self.podcast_description.get_buffer()
         return {
-            'title': self.entry_title.get_text().strip(),
-            'link': self.entry_link.get_text().strip(),
-            'section': self.entry_section.get_text().strip() or _('Other'),
+            'title': self.podcast_title_entry.get_text().strip(),
+            'url': self.podcast_feed_url_entry.get_text().strip(),
+            'link': self.podcast_website_link_entry.get_text().strip(),
+            'section': self.podcast_section_entry.get_text().strip() or _('Other'),
             'description': buf.get_text(buf.get_start_iter(), buf.get_end_iter(), True).strip(),
         }
 
@@ -735,46 +812,84 @@ class ManualEntryController(object):
         self.open_manual_edit_episode_dialog()
 
     def open_manual_add_podcast_dialog(self):
+        """Open the dialog to manually create a new podcast."""
+
         dialog = ManualPodcastDialog(self.ui.main_window)
         try:
-            response = dialog.run()
-            if response == Gtk.ResponseType.OK:
-                podcast = self.create_manual_podcast(**dialog.get_data())
-                self._refresh_ui_after_podcast_change(podcast, select=True)
+            # Loop to allow the user to fix validation issues in the dialog without having
+            # to re-enter all the data again. The dialog will only close when the user clicks
+            # Cancel or successfully adds a podcast with valid data.
+            while True:
+                response = dialog.run()
+
+                # User clicked Cancel, closed the dialog, or pressed Esc.
+                if response != Gtk.ResponseType.OK:
+                    return
+
+                # Add the podcast with the new data from the dialog. If creation
+                # fails (e.g. due to missing required fields), prompt the user to fix
+                # the issues and retry.
+                new_podcast = self.create_manual_podcast(**dialog.get_data())
+                if new_podcast is not None:
+
+                    # If the podcast was successfully created, refresh the UI to show the changes
+                    # selecting the new podcast in the podcast list then exit the loop.
+                    self._refresh_ui_after_podcast_change(new_podcast, select=True)
+                    break
+
         except Exception as exc:
-            self._show_error(_('Could not create manual podcast'), str(exc))
+            self._show_error(_('Add Podcast Manually -> New podcast not added'),
+                             _('Could not add selected podcast due to following error:\n' + str(exc)))
         finally:
             dialog.destroy()
 
     def open_manual_edit_podcast_dialog(self):
-        podcast = getattr(self.ui, 'active_channel', None)
-        if podcast is None:
-            self._show_error(
-                _('No podcast selected'),
-                _('Select a podcast first.')
-            )
-            return
+        """Open the dialog to manually edit an existing podcast."""
 
-        if getattr(podcast, 'ALL_EPISODES_PROXY', False):
-            self._show_error(
-                _('All Episodes list selected'),
-                _('Select a real podcast first.')
-            )
+        podcast = self._get_selected_existing_podcast()
+        if podcast is None:
             return
 
         dialog = ManualPodcastDialog(self.ui.main_window, podcast=podcast)
-
         try:
-            response = dialog.run()
-            if response == Gtk.ResponseType.OK:
-                podcast = self.update_manual_podcast(podcast, **dialog.get_data())
-                self._refresh_ui_after_podcast_change(podcast, select=True)
+            # Loop to allow the user to fix validation issues in the dialog without having
+            # to re-enter all the data again. The dialog will only close when the user clicks
+            # Cancel or successfully adds a podcast with valid data.
+            while True:
+                response = dialog.run()
+
+                # User clicked Cancel, closed the dialog, or pressed Esc.
+                if response != Gtk.ResponseType.OK:
+                    return
+
+                # Update the podcast with the new data from the dialog. If the update
+                # fails (e.g. due to missing required fields), do not proceed with
+                # refreshing the UI and just return so the user can fix the issues
+                # in the dialog.
+                updated_podcast = self.update_manual_podcast(podcast, **dialog.get_data())
+                if updated_podcast is not None:
+
+                    # If the podcast was successfully updated, refresh the podcast and episode
+                    # list models to reflect any changes to the podcast title or feed URL.
+                    # Note: update_podcast_list_model will select the podcast in the podcast
+                    # list based on feed URL - it cannot select based on title.
+                    self.ui.update_podcast_list_model(select_url=updated_podcast.url)
+                    self.ui.update_episode_list_model()
+
+                    # Refresh the UI to show the changes selecting the updated podcast
+                    # in the podcast list.
+                    self._refresh_ui_after_podcast_change(updated_podcast, select=True)
+                    break
+
         except Exception as exc:
-            self._show_error(_('Could not update podcast'), str(exc))
+            self._show_error(_('Edit Podcast Manually -> Selected podcast not updated'),
+                             _('Could not update podcast due to following error:\n' + str(exc)))
         finally:
             dialog.destroy()
 
     def open_manual_add_episode_dialog(self):
+        """Open the dialog to manually add a new podcast episode."""
+
         podcasts = list(self.ui.model.get_podcasts())
         if not podcasts:
             self._show_error(
@@ -796,6 +911,8 @@ class ManualEntryController(object):
             dialog.destroy()
 
     def open_manual_add_episode_batch_dialog(self):
+        """Open the dialog to manually add a batch of new podcast episodes."""
+
         podcasts = list(self.ui.model.get_podcasts())
         if not podcasts:
             self._show_error(
@@ -846,13 +963,41 @@ class ManualEntryController(object):
         finally:
             dialog.destroy()
 
-    def create_manual_podcast(self, title, description='', link='', section=''):
+    def create_manual_podcast(self, title, url, description='', link='', section=''):
+        """Create a new podcast with the provided data from the add dialog."""
+
+        # Verify a title was specified.
         title = (title or '').strip()
         if not title:
-            raise ManualEntryError(_('Podcast title is required.'))
+            self._show_error(_('Add Podcast Manually -> Title missing'),
+                             _('A podcast title is required to save the podcast settings.'))
+            return None  # Do not create the podcast if the title is missing.
 
+        # Create a new podcast based on the PodcastClass.
         podcast = self.ui.model.PodcastClass(self.ui.model)
-        podcast.url = self._build_unique_manual_podcast_url(title)
+
+        # Verify the specified feed URL is valid.
+        url = (url or '').strip()
+        if not url:
+            # If no URL was specified, create a unique manual feed URL based on the podcast title.
+            podcast.url = self._build_unique_manual_podcast_url(title)
+            #logger.warning("Add Podcast Manually -> Podcast feed URL not specified - creating manual url: %s", podcast.url)
+        else:
+            podcast.url = url
+
+        # Verify the URL is reachable before saving it to avoid setting an invalid feed URL.
+        # Note: manual podcasts using a manual:// feed URL are considered reachable.
+        if not _is_url_reachable(podcast.url):
+            if _ask_yes_no(self.ui.main_window,
+                           _('Add Podcast Manually -> Confirm saving unreachable feed URL'),
+                           _('Warning! The podcast feed URL provided is not reachable.\n\n' +
+                             'Do you want to save this feed URL for the new podcast anyway?')
+                          ) != Gtk.ResponseType.YES:
+                #logger.warning("Add Podcast Manually -> Unreachable feed URL was NOT saved: %s", podcast.url)
+                return None  # Do not add the podcast with an unreachable feed URL
+            #else:
+                #logger.warning("Add Podcast Manually -> Unreachable feed URL saved: %s", podcast.url)
+
         podcast.title = title
         podcast.link = link.strip()
         podcast.description = description.strip()
@@ -863,28 +1008,83 @@ class ManualEntryController(object):
         podcast.save()
         podcast.get_save_dir(force_new=True)
         podcast.save()
+
         return podcast
 
-    def update_manual_podcast(self, podcast, title, description='', link='', section=''):
+    def update_manual_podcast(self, podcast, title, url, link='', section='', description=''):
+        """Update the selected podcast with the provided data from the edit dialog."""
+
         title = (title or '').strip()
         if not title:
-            raise ManualEntryError(_('Podcast title is required.'))
+            self._show_error(_('Edit Podcast Manually -> Title missing'),
+                             _('A podcast title is required to save the podcast settings.'))
+            return None  # Do not update the podcast if the title is missing.
 
         old_title = podcast.title or ''
-        podcast.link = link.strip()
-        podcast.description = description.strip()
-        podcast.section = (section or '').strip() or _('Other')
-
         if title != old_title:
             podcast.rename(title)
         else:
             podcast.title = title
-            podcast.save()
+
+        url = (url or '').strip()
+        if not url:
+            self._show_error(_('Edit Podcast Manually -> Feed URL missing'),
+                             _('A podcast feed URL is required to save the podcast settings.\n' +
+                               'Note - for podcasts with no feed, use:\n' +
+                               '       manual://podcast/podcast-title (replacing all whitespace with dashes)'))
+            return None  # Do not update the podcast if the feed URL is missing.
+
+        old_url = podcast.url
+        new_url = url
+
+        # Verify the new URL is unique among the other podcasts in the model.
+        for channel in getattr(self.ui, 'channels', []):
+            if channel is not podcast and getattr(channel, 'url', None) == new_url:
+                if _ask_yes_no(self.ui.main_window,
+                               _('Edit Podcast Manually -> Confirm saving duplicate feed URL'),
+                               _('Warning! Another podcast already uses this feed URL.\n\n' +
+                                 'Do you want to save this feed URL for the selected podcast anyway?')
+                              ) != Gtk.ResponseType.YES:
+                    #logger.warning("Edit Podcast Manually -> Duplicate feed URL was NOT saved: %s", new_url)
+                    return None  # Do not update the podcast with the duplicate feed URL
+                #else:
+                    #logger.warning("Edit Podcast Manually -> Duplicate feed URL saved: %s", new_url)
+
+        # If the feed URL changed, verify the URL is reachable before saving it to avoid
+        # setting an invalid feed URL that cannot be used to update the podcast later.
+        # If the URL is reachable, clear the cover art cache for both the old and new URL
+        # to ensure the cover art gets properly updated. If not reachable, warn the user
+        # but still allow them to save the new URL in case they want to fix it later.
+        if new_url != old_url:
+            if _is_url_reachable(new_url):
+                podcast.url = new_url
+            else:
+                if _ask_yes_no(self.ui.main_window,
+                               _('Edit Podcast Manually -> Confirm saving unreachable feed URL'),
+                               _('Warning! The podcast feed URL provided is not reachable.\n\n' +
+                                 'Do you want to save this feed URL for the selected podcast anyway?')
+                              ) != Gtk.ResponseType.YES:
+                    #logger.warning("Edit Podcast Manually -> Unreachable feed URL was NOT saved: %s", new_url)
+                    return None  # Do not update the podcast with an unreachable feed URL
+                else:
+                    #logger.warning("Edit Podcast Manually -> Unreachable feed URL saved: %s", new_url)
+                    podcast.url = new_url
+
+            #logger.warning("Edit Podcast Manually -> Podcast feed URL changed - OLD: %s, NEW: %s", old_url, new_url)
+        #else:
+            #logger.warning("Edit Podcast Manually -> Podcast feed URL did NOT change: %s", old_url)
 
         podcast.link = link.strip()
         podcast.description = description.strip()
         podcast.section = (section or '').strip() or _('Other')
         podcast.save()
+
+        # Clear the cover art cache for both the old and new URL to ensure the cover art gets
+        # properly updated in the UI. This is done whether the URL is updated or not since the
+        # cache gets refreshed the next time the podcast is displayed.
+        self.ui.podcast_list_model.clear_cover_cache(old_url)
+        self.ui.podcast_list_model.clear_cover_cache(new_url)
+
         return podcast
 
     def add_manual_episode(self, podcast, title, media_file, published_text,
@@ -893,9 +1093,6 @@ class ManualEntryController(object):
                            replace_media=True):
         if podcast is None:
             raise ManualEntryError(_('A podcast must be selected.'))
-
-
-
 
         if not media_file:
             raise ManualEntryError(_('A media file must be selected.'))
@@ -1169,6 +1366,32 @@ class ManualEntryController(object):
         raise ManualEntryError(
             _('Published date must use YYYY-MM-DD or YYYY-MM-DD HH:MM.')
         )
+
+    def _get_selected_existing_podcast(self):
+        podcast = getattr(self.ui, 'active_channel', None)
+
+        if podcast is None:
+            self._show_error(
+                _('No podcast selected'),
+                _('Select a podcast first.')
+            )
+            return None
+
+        if getattr(podcast, 'ALL_EPISODES_PROXY', False):
+            self._show_error(
+                _('All Episodes list selected'),
+                _('Select a valid, existing podcast first.')
+            )
+            return None
+
+        if not getattr(podcast, 'url', None):
+            self._show_error(
+                _('Invalid podcast selected'),
+                _('Select a valid, existing podcast first.')
+            )
+            return None
+
+        return podcast
 
     def _get_single_selected_episode(self):
         getter = getattr(self.ui, 'get_selected_episodes', None)
