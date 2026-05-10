@@ -40,6 +40,76 @@ _ = gpodder.gettext
 
 logger = logging.getLogger(__name__)
 
+#RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+# Constants used to define a color themes and styles for the gPodder+ UI.
+class GUITheme:
+    APP_STATUS_BG_COLOR = '#FFFFFF'      # White
+    APP_STATUS_FG_COLOR = '#000000'      # Black
+    APP_STATUS_BORDER_COLOR = '#000000'  # Black
+
+    EPISODE_NEW_FG_COLOR = '#000000'   # Black
+    EPISODE_NEW_STYLE_BEG = '<b>'      # Bold
+    EPISODE_NEW_STYLE_END = '</b>'     # Bold
+
+    EPISODE_OLD_FG_COLOR = '#0000FF'   # Blue
+    EPISODE_OLD_STYLE_BEG = '<i>'      # Italic
+    EPISODE_OLD_STYLE_END = '</i>'     # Italic
+
+    EPISODE_DEL_FG_COLOR = '#FF0000'   # Red
+    EPISODE_DEL_STYLE_BEG = ''         # Normal
+    EPISODE_DEL_STYLE_END = ''         # Normal
+
+    EPISODE_SELECT_BG_COLOR = '#98DFF0'  # Slate Blue - Light
+    EPISODE_SELECT_FG_COLOR = '#000000'  # Black
+
+    EPISODE_HOVER_BG_COLOR = '#48C5E5'  # Slate Blue - Medium
+    EPISODE_HOVER_FG_COLOR = '#000000'  # Black
+
+    PODCAST_SECTION_BG_COLOR = '#136E85'  # Slate Blue - Dark
+    PODCAST_SECTION_FG_COLOR = '#FFFFFF'  # White
+    PODCAST_SECTION_STYLE_BEG = '<b>'     # Bold
+    PODCAST_SECTION_STYLE_END = '</b>'    # Bold
+
+    PODCAST_SELECT_BG_COLOR = '#98DFF0'  # Slate Blue - Light
+    PODCAST_SELECT_FG_COLOR = '#000000'  # Black
+
+    PODCAST_HOVER_BG_COLOR = '#48C5E5'  # Slate Blue - Medium
+    PODCAST_HOVER_FG_COLOR = '#000000'  # Black
+
+    GPODDER_PLUS_CSS = f"""
+            #app-status-bar {{
+            background-color: {APP_STATUS_BG_COLOR};
+            color: {APP_STATUS_FG_COLOR};
+            border-top: 1px solid {APP_STATUS_BORDER_COLOR};
+            padding: 3px 6px;
+        }}
+
+        #podcast-list.view:selected,
+        #podcast-list.view:selected:focus {{
+            background-color: {PODCAST_SELECT_BG_COLOR};
+            color: {PODCAST_SELECT_FG_COLOR};
+        }}
+
+        #podcast-list.view:selected:hover,
+        #podcast-list.view:selected:focus:hover {{
+            background-color: {PODCAST_HOVER_BG_COLOR};
+            color: {PODCAST_HOVER_FG_COLOR};
+        }}
+
+        #episode-list.view:selected,
+        #episode.view:selected:focus {{
+            background-color: {EPISODE_SELECT_BG_COLOR};
+            color: {EPISODE_SELECT_FG_COLOR};
+        }}
+
+        #episode.view:selected:hover,
+        #episode.view:selected:focus:hover {{
+            background-color: {EPISODE_HOVER_BG_COLOR};
+            color: {EPISODE_HOVER_FG_COLOR};
+        }}
+        """
+#RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+
 
 class GEpisode(model.PodcastEpisode):
     __slots__ = ()
@@ -290,25 +360,33 @@ class EpisodeListModel(Gtk.ListStore):
         d = []
 
         #RobL--^
-        # Display the episode title differently based on its state.
+        # Display the episode title differently based on its state using the GUITheme constants defined above.
         title = episode.trimmed_title if self._config_ui_gtk_episode_list_trim_title_prefix else episode.title
         escaped_title = html.escape(title)
-        if episode.state != gpodder.STATE_DELETED and episode.is_new:
-            d.append('<span foreground="Black">')
-            d.append('<b>')
-            d.append(escaped_title)
-            d.append('</b>')
-            d.append('</span>')
-        elif episode.state != gpodder.STATE_DELETED and not episode.is_new:
-            d.append('<span foreground="Blue">')
-            d.append('<i>')
-            d.append(escaped_title)
-            d.append('</i>')
-            d.append('</span>')
+        if episode.state != gpodder.STATE_DELETED and episode.is_new:        # New episodes
+            d.append(
+                f'<span foreground="{GUITheme.EPISODE_NEW_FG_COLOR}">'
+                f'{GUITheme.EPISODE_NEW_STYLE_BEG}'
+                f'{escaped_title}'
+                f'{GUITheme.EPISODE_NEW_STYLE_END}'
+                f'</span>'
+            )
+        elif episode.state != gpodder.STATE_DELETED and not episode.is_new:  # Old episodes
+            d.append(
+                f'<span foreground="{GUITheme.EPISODE_OLD_FG_COLOR}">'
+                f'{GUITheme.EPISODE_OLD_STYLE_BEG}'
+                f'{escaped_title}'
+                f'{GUITheme.EPISODE_OLD_STYLE_END}'
+                f'</span>'
+            )
         else:
-            d.append('<span foreground="Red">')
-            d.append(escaped_title)
-            d.append('</span>')
+            d.append(
+                f'<span foreground="{GUITheme.EPISODE_DEL_FG_COLOR}">'       # Deleted episodes
+                f'{GUITheme.EPISODE_DEL_STYLE_BEG}'
+                f'{escaped_title}'
+                f'{GUITheme.EPISODE_DEL_STYLE_END}'
+                f'</span>'
+            )
         #RobL--^
 
         if self._config_ui_gtk_episode_list_descriptions:
@@ -856,8 +934,8 @@ class PodcastListModel(Gtk.ListStore):
                     True, True,
                     # C_VIEW_SHOW_UNPLAYED, C_HAS_EPISODES, C_SEPARATOR
                     True, True, False,
-                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND  #RobL
-                    0, False, section.title, '#136E85')                      #RobL - dark blue for sections
+                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND      #RobL
+                    0, False, section.title, GUITheme.PODCAST_SECTION_BG_COLOR)  #RobL
 
         if config.ui.gtk.podcast_list.all_episodes and channels:
             all_episodes = PodcastChannelProxy(db, config, channels, '', self)
@@ -867,7 +945,7 @@ class PodcastListModel(Gtk.ListStore):
             # Separator item
             if not config.ui.gtk.podcast_list.sections:
                 self.append(('', '', '', None, SeparatorMarker, None, '',
-                    True, True, True, True, True, True, 0, False, '', ''))   #RobL
+                    True, True, True, True, True, True, 0, False, '', ''))  #RobL
 
         def groupby_func(channel):
             return channel.group_by
@@ -950,10 +1028,25 @@ class PodcastListModel(Gtk.ListStore):
         if isinstance(channel, PodcastChannelProxy) and not channel.ALL_EPISODES_PROXY:
             section = channel.title
 
-            # We could customized the section header here with the list
+            #RobL--v
+            # ORIGINAL COMMENT -- We could customized the section header here with the list
             # of channels and their stats (i.e. add some "new" indicator)
-            description = '<span foreground="white"><b>%s</b></span>' % (
-                    html.escape(section))
+
+            # Update the section header to include the total number of episodes
+            # in the section.
+            if total == 1:
+                section_text = f'{section}   (1 episode)'
+            else:
+                section_text = f'{section}   ({total} episodes)'
+
+            # The section header is styled based on the GUITheme constants defined above.
+            description = (
+                f'<span foreground="{GUITheme.PODCAST_SECTION_FG_COLOR}">'
+                f'{GUITheme.PODCAST_SECTION_STYLE_BEG}{html.escape(section_text)}'
+                f'{GUITheme.PODCAST_SECTION_STYLE_END}</span>'
+            )
+            #RobL--^
+
             pill_image = None
             cover_image = None
         else:
