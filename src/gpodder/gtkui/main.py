@@ -130,10 +130,27 @@ class gPodder(BuilderWidget):
 
         self.main_window.show()
 
-        self.clear_app_status()  #RobL
+        #RobL--v
+        # In Windows, the taskbar icon can shows as a Python application
+        # rather than the gPodder+ app. This code attempts to force an update
+        # to the taskbar icon. We first set the main window icon from the
+        # gPodder icon file, if possible. This is done here in the GTK UI
+        # code rather than in the core application code because it is
+        # specific to the GTK UI and may involve GTK-specific functionality
+        # for loading the icon file.
+        if gpodder.ui.win32:
+            try:
+                self.main_window.set_icon_from_file(gpodder.icon_file)
+                self.gPodder.set_icon_from_file(gpodder.icon_file)
+            except Exception:
+                logger.warning('Could not set main window icon from %s',
+                            gpodder.icon_file, exc_info=True)
+        #RobL--^
+
+        self.clear_app_status()  # RobL - Clear the general app status area.
 
         #RobL--v
-        # Load a customer CSS stylesheet to improve the visibility of the
+        # Load a custom CSS stylesheet to improve the visibility of the
         # selected row in the treeviews, especially in dark themes.
         self.load_custom_gtk_css()
         #RobL--^
@@ -424,6 +441,13 @@ class gPodder(BuilderWidget):
         action.connect('activate', self.on_episode_lock_activate)
         g.add_action(action)
 
+        #RobL--v
+        action = Gio.SimpleAction.new_stateful(
+            'markEpisodesOldNewSelectedPodcast', None, GLib.Variant.new_boolean(False))
+        action.connect('activate', self.on_mark_episodes_as_old_new_selected_podcast)
+        g.add_action(action)
+        #RobL--^
+
         action = Gio.SimpleAction.new_stateful(
             'archiveEpisodesSelectedPodcast', None, GLib.Variant.new_boolean(False))  #RobL - formerly channelAutoArchive
         action.connect('activate', self.on_channel_toggle_lock_activate)
@@ -486,7 +510,7 @@ class gPodder(BuilderWidget):
             # 'Add new podcast manually' - defined in manual_entry_controller below                     #RobL
             # 'Add new episode manually' - defined in manual_entry_controller below                     #RobL
             # 'Add multiple episodes manually' - defined in manual_entry_controller below               #RobL
-            ('markEpisodesOldNewSelectedPodcast', self.on_mark_episodes_as_old_new_selected_podcast),   #RobL
+            # markEpisodesOldNewSelectedPodcast - defined above                                         #RobL
             # archiveAllEpisodesSelectedPodcast - defined above                                         #RobL
             ('undeleteEpisodesSelectedPodcast', self.on_undelete_episodes_selected_podcast),            #RobL
             ('removeSelectedPodcast', self.on_remove_selected_podcast),                                 #RobL
@@ -557,12 +581,19 @@ class gPodder(BuilderWidget):
             logger.warning('manual_entry_controller not available, skipping installation of its actions')
         #RobL--^
 
-        # gPodder
-        # Podcasts
-        self.update_action = g.lookup_action('checkForNewEpisodesAllPodcasts')  #RobL - Formerly 'update'
-        self.update_channel_action = g.lookup_action('updateAllPodcasts')       #RobL - Formerly 'updateChannel'
-        self.edit_channel_action = g.lookup_action('showPodcastDetails')        #RobL - Formerly 'editChannel'
-        # Episodes
+        #--------------
+        # All Podcasts
+        #--------------
+        self.update_all_feeds_action = g.lookup_action('checkForNewEpisodesAllPodcasts')  #RobL - Formerly 'update'
+        self.update_channel_action = g.lookup_action('updateAllPodcasts')                 #RobL - Formerly 'updateChannel'
+        #---------
+        # Podcast
+        #---------
+        self.edit_channel_action = g.lookup_action('showPodcastDetails')  #RobL - Formerly 'editChannel'
+        self.mark_episodes_old_new_action = g.lookup_action('markEpisodesOldNewSelectedPodcast')  #RobL
+        #---------
+        # Episode
+        #---------
         self.play_action = g.lookup_action('play')
         self.open_action = g.lookup_action('open')
         self.force_download_action = g.lookup_action('forceDownload')
@@ -2170,9 +2201,10 @@ class gPodder(BuilderWidget):
 
     #RobL--v
     # Mark all episodes as old/new for the selected podcast.
-    # If episodes are new, mark them as old. If episodes are old, mark them as new.
+    # Checked menu item = mark all episodes new.
+    # Unchecked menu item = mark all episodes old.
     def on_mark_episodes_as_old_new_selected_podcast(self, action, param):
-        """Toggle between marking all episodes as old or new for the selected podcast."""
+        """Set all non-deleted episodes as old or new for the selected podcast."""
 
         if self.active_channel is None:
             title = _('No podcast selected')
@@ -2180,69 +2212,82 @@ class gPodder(BuilderWidget):
             self.show_message(message, title, widget=self.treeChannels)
             return
 
-        title = _('Mark all episodes as old/new in selected podcast')
-        message = _(
-            'Are you sure you want to change the old/new state of all episodes in the %s podcast?\n\n'
-            'If episodes are new, they will be marked as old.\n'
-            'If episodes are old, they will be marked as new.'
-            ) % self.active_channel.title
+        # Determines whether to mark episodes as new or old based on the current
+        # state of the menu item.
+        # Note: The initial state of the menu item is "unchecked" (mark as old),
+        # so if the user clicks it, we want to mark episodes as new, and if they
+        # click it again, we want to mark episodes as old.
+        mark_as_new = not action.get_state().get_boolean()
+        title = (
+            _('Mark all episodes as new in selected podcast')
+            if mark_as_new
+            else _('Mark all episodes as old in selected podcast')
+        )
+        message = (
+            _('Are you sure you want to mark all episodes in the %s podcast as new?')
+            if mark_as_new
+            else _('Are you sure you want to mark all episodes in the %s podcast as old?')
+        ) % self.active_channel.title
+
+        # Prompts user to verify they want to mark all episodes as new or old.
         if not self.show_confirmation(message, title):
             return False
 
-        episodes = self.active_channel.get_all_episodes()
-
-        # Internal old/new toggle rules
-        # -----------------------------
-        # Option 1: Mark all episodes as old if there are any episodes that are new AND not downloaded.
-        # Otherwise mark all episodes as new.
-        #mark_as_old = any(
-        #    (not episode.was_downloaded(and_exists=True)) and episode.is_new
-        #    for episode in episodes
-        #)
-        # Option 2: Mark all episodes as old if there are ANY episodes that are new.
-        # Otherwise mark all episodes as new.
-        mark_as_old = any(episode.is_new for episode in episodes)
+        # Get all non-deleted episodes for the selected podcast.
+        episodes = [
+            episode for episode in self.active_channel.get_all_episodes()
+            if episode.state != gpodder.STATE_DELETED
+        ]
 
         self.set_app_status(
-            _('Marking all episodes old') if mark_as_old
-            else _('Marking all episodes new')
+            _('Marking all episodes new') if mark_as_new
+            else _('Marking all episodes old')
         )
 
-        def do_mark_episodes():
-            try:
-                for episode in episodes:
-                    if mark_as_old:
-                        #logger.warning('Marking %s - %s as OLD', self.active_channel.title, episode.title)
-                        episode.is_new = False
+        # Create a function that can be run in the background to mark episodes.
+        @util.run_in_background
+        def mark_episodes_proc():
+            for episode in episodes:
+                if mark_as_new:
+                    # Mark the episode as new and update the database accordingly.
+                    # Note: This also undeletes deleted episodes but deleted episodes
+                    # were filtered out so this should only affect non-deleted episodes.
+                    episode.mark_new()
 
-                        # episode.mark(is_played=True) -- deprecated, as we want to keep the "played" state separate from the "new" state.
-                        # This allows users to mark episodes as old without marking them as played, which is useful if they want to
-                        # keep track of which episodes they've listened to, even if they don't want them to be marked as new anymore.
+                    # Force filename regeneration so the file is renamed to match
+                    # the <podcast title>-Sxx-Eyy-<episode title> naming scheme.
+                    if mark_as_new and episode.was_downloaded(and_exists=True):
+                        episode.local_filename(create=True, force_update=True)
+                else:
+                    # Mark the episode as old and update the database accordingly.
+                    episode.mark_old()
 
-                        # To preserve old behavior: only mark undownloaded episodes old.
-                        #if not episode.was_downloaded(and_exists=True):
-                        #    episode.mark(is_played=True)
-                    else:
-                        #logger.warning('Marking %s - %s as NEW', self.active_channel.title, episode.title)
-                        # Mark as new -- this also undeletes deleted episodes.
-                        episode.is_new = True
-
-                        #episode.mark(is_played=False) -- deprecated, as we want to keep the "played" state separate from the "new" state.
-
-                        # If the episode file exists, force filename regeneration so
-                        # the file is renamed to match the Plex naming scheme
-                        if episode.was_downloaded(and_exists=True):
-                            episode.local_filename(create=True, force_update=True)
-
+            def finish_mark_episodes_proc():
                 self.update_podcast_list_model(selected=True)
-                self.update_episode_list_icons(update_all=True)
-
-            finally:
+                self.update_episode_list_model()
+                self.update_mark_episodes_old_new_action_state()
                 self.clear_app_status()
+                self.channels_popover.popdown()
+                return False
 
+            util.idle_add(finish_mark_episodes_proc)
+    #RobL--^
+
+    #RobL--v
+    def update_mark_episodes_old_new_action_state(self):
+        """Update the selected podcast's old/new checkbox state."""
+
+        if self.active_channel is None or isinstance(self.active_channel, PodcastChannelProxy):
+            self.mark_episodes_old_new_action.change_state(GLib.Variant.new_boolean(False))
+            self.mark_episodes_old_new_action.set_enabled(False)
             return False
 
-        util.idle_add(do_mark_episodes)
+        episodes = self.active_channel.get_all_episodes()
+        all_episodes_are_new = bool(episodes) and all(episode.is_new for episode in episodes)
+
+        self.mark_episodes_old_new_action.change_state(
+            GLib.Variant.new_boolean(all_episodes_are_new))
+        self.mark_episodes_old_new_action.set_enabled(True)
 
         return False
     #RobL--^
@@ -2441,6 +2486,17 @@ class gPodder(BuilderWidget):
             return True
 
         if event is None or event.button == 3:
+
+            #RobL--v
+            # If all episodes are new, then the menu item should say
+            # "Mark all episodes as old" and be unchecked.
+            episodes = self.active_channel.get_all_episodes()
+            all_episodes_are_new = bool(episodes) and all(episode.is_new for episode in episodes)
+
+            self.mark_episodes_old_new_action.change_state(
+                GLib.Variant.new_boolean(all_episodes_are_new))
+            #RobL--v
+
             self.auto_archive_action.change_state(
                 GLib.Variant.new_boolean(self.active_channel.auto_archive_episodes))
 
@@ -3273,7 +3329,7 @@ class gPodder(BuilderWidget):
         self.hboxUpdateFeeds.hide()
         if not self.application.want_headerbar:
             self.btnUpdateFeeds.show()
-        self.update_action.set_enabled(True)
+        self.update_all_feeds_action.set_enabled(True)  #RobL
         self.update_channel_action.set_enabled(True)
 
     def on_btnCancelFeedUpdate_clicked(self, widget):
@@ -3327,7 +3383,7 @@ class gPodder(BuilderWidget):
         # Fix URLs if mygpo has rewritten them
         self.rewrite_urls_mygpo()
 
-        self.update_action.set_enabled(False)
+        self.update_all_feeds_action.set_enabled(False)  #RobL
         self.update_channel_action.set_enabled(False)
 
         self.feed_cache_update_cancelled = False
@@ -3439,7 +3495,7 @@ class gPodder(BuilderWidget):
                     self.feed_cache_update_cancelled = True
                     self.btnCancelFeedUpdate.show()
                     self.btnCancelFeedUpdate.set_sensitive(True)
-                    self.update_action.set_enabled(True)
+                    self.update_all_feeds_action.set_enabled(True)  #RobL
                     self.btnCancelFeedUpdate.set_image(Gtk.Image.new_from_icon_name('edit-clear', Gtk.IconSize.BUTTON))
                 else:
                     episodes = downloadable_episodes
@@ -4398,6 +4454,7 @@ class gPodder(BuilderWidget):
             self.edit_channel_action.set_enabled(False)
 
         self.update_episode_list_model()
+        self.update_mark_episodes_old_new_action_state()  #RobL
 
     def get_podcast_urls_from_selected_episodes(self):
         """Get a set of podcast URLs based on the selected episodes."""

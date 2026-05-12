@@ -84,7 +84,7 @@
             <section>
                 <item>
                     <attribute name="action">win.markEpisodesOldNewSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Toggle All Episodes New/Old</attribute>
+                    <attribute name="label" translatable="yes">All Episodes New</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.archiveEpisodesSelectedPodcast</attribute>
@@ -421,7 +421,7 @@
         <section>
             <item>
                 <attribute name="action">win.markEpisodesOldNewSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Toggle All Episodes New/Old</attribute>
+                <attribute name="label" translatable="yes">All Episodes New</attribute>
             </item>
             <item>
                 <attribute name="action">win.archiveEpisodesSelectedPodcast</attribute>
