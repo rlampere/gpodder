@@ -381,17 +381,17 @@ class gPodder(BuilderWidget):
         #RobL--^
 
         #RobL--v
-        # Defer slow network-share download-folder checks until the UI is usable.
-        defer_secs=2  # Number of seconds to defer the download-folder check.
-        print(f'Scheduling deferred check of download folders - wait %s seconds', defer_secs)
-        GLib.timeout_add_seconds(defer_secs, self.check_download_folders_deferred)
+        # Defer start of finding partial downloads until the UI is usable.
+        defer_secs=1  # Number of seconds to defer start
+        print(f'Scheduling deferred scan for partial downloads - wait %s seconds', defer_secs)
+        GLib.timeout_add_seconds(defer_secs, self.find_partial_downloads_deferred)
         #RobL--^
 
         #RobL--v
-        # Defer start of finding partial downloads until the UI is usable.
-        defer_secs+=10  # Number of seconds to defer the download-folder check.
-        print(f'Scheduling deferred scan for partial downloads - wait %s seconds', defer_secs)
-        GLib.timeout_add_seconds(defer_secs, self.find_partial_downloads_deferred)
+        # Defer slow network-share download-folder checks until the UI is usable.
+        defer_secs+=2  # Number of seconds to defer start
+        print(f'Scheduling deferred check of download folders - wait %s seconds', defer_secs)
+        GLib.timeout_add_seconds(defer_secs, self.check_download_folders_deferred)
         #RobL--^
 
         if self.options.close_after_startup:
@@ -631,7 +631,10 @@ class gPodder(BuilderWidget):
 
         def start_progress_callback(count):
             if not count:
+                logger.info('Deferred partial-download scan - count = 0 or None....')
                 return
+            else:
+                logger.info('Deferred partial-download scan - count > 0....')
 
             def start_ui():
                 self.partial_downloads_indicator = ProgressIndicator(
@@ -650,6 +653,7 @@ class gPodder(BuilderWidget):
                 self.partial_downloads_indicator.on_progress(0.0)
                 self.wNotebook.set_current_page(1)
 
+            logger.info('Deferred partial-download scan - start_ui....')
             util.idle_add(start_ui)
 
         def progress_callback(title, progress):
@@ -659,6 +663,7 @@ class gPodder(BuilderWidget):
                 self.partial_downloads_indicator.on_message(title)
                 self.partial_downloads_indicator.on_progress(progress)
 
+            logger.info('Deferred partial-download scan - update_ui....')
             util.idle_add(update_ui)
 
         def final_progress_callback():
@@ -668,6 +673,7 @@ class gPodder(BuilderWidget):
                 self.partial_downloads_indicator.on_message(_('Cleaning up...'))
                 self.partial_downloads_indicator.on_progress(1.0)
 
+            logger.info('Deferred partial-download scan - final_ui....')
             util.idle_add(final_ui)
 
         def finish_progress_callback(resumable_episodes):
@@ -685,6 +691,7 @@ class gPodder(BuilderWidget):
                     self.partial_downloads_indicator.on_finished()
                     self.partial_downloads_indicator = None
 
+            logger.info('Deferred partial-download scan completed.')
             util.idle_add(offer_resuming)
 
         common.find_partial_downloads(
@@ -702,7 +709,7 @@ class gPodder(BuilderWidget):
 
         Returning False tells GLib to run this timeout only once.
         """
-        logger.info('Deferred partial-download scan starting')
+        logger.info('Deferred partial-download scan starting...')
         util.run_in_background(self.find_partial_downloads)
         return False
     #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
@@ -725,10 +732,12 @@ class gPodder(BuilderWidget):
         total = len(channels)
         changed_urls = set()
 
-        logger.info('Deferred download-folder scan started for %d podcasts', total)
-
         def worker():
+            logger.info('Deferred download-folder scan started for %d podcasts', total)
+
             for index, podcast in enumerate(channels, 1):
+                logger.info('Deferred download-folder scan checking %d/%d: %s',
+                            index, total, podcast.title)
                 try:
                     logger.debug(
                         'Checking download folder %d/%d: %s',
@@ -756,6 +765,7 @@ class gPodder(BuilderWidget):
                 return False
 
             util.idle_add(finish_ui)
+            logger.info('Deferred download-folder scan - background worker finished')
 
         util.run_in_background(worker)
         return False
@@ -3570,6 +3580,8 @@ class gPodder(BuilderWidget):
 
     def close_gpodder(self):
         """Clean everything and exit properly."""
+        logger.info('close_gpodder: starting shutdown')  #RobL
+
         # Cancel any running background updates of the episode list model
         self.episode_list_model.background_update = None
 
@@ -3582,6 +3594,7 @@ class gPodder(BuilderWidget):
             Gtk.main_iteration()
 
         self.core.shutdown()
+        logger.info('close_gpodder: core shutdown complete')  #RobL
 
         self.application.remove_window(self.gPodder)
 
