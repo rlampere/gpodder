@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-#RobL--v manual_entry.py is a new gPodder module added by RobL & created by ChatGPT
+#RobL-v-v-v-v-v-v-v-v-v-v-#-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+#
+#   manual_entry.py - New gPodder+ module added by RobL with help from ChatGPT
+#
+#RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
 """
 Manual podcast/episode add + edit support for gPodder GTK.
 
@@ -67,7 +71,7 @@ import time
 import uuid
 
 import gpodder
-from gpodder import util
+from gpodder import util, podcastmetadata
 from gpodder.gtkui.desktop import channel
 from gpodder.model import Model
 
@@ -274,9 +278,171 @@ def _extract_media_metadata(path_obj):
         'media_file': str(source),
     }
 
+class ManualPodcastMetadataSearchDialog(Gtk.Dialog):
+    """Search online podcast metadata providers and return one selected podcast."""
+
+    COL_TITLE = 0
+    COL_FEED_URL = 1
+    COL_WEBSITE_URL = 2
+    COL_SOURCE = 3
+    COL_DESCRIPTION = 4
+    COL_OBJECT = 5
+
+    def __init__(self, parent, config, initial_query=''):
+        super().__init__(
+            title=_('Find podcast metadata online'),
+            transient_for=parent,
+            modal=True,
+        )
+
+        self.config = config
+        self.selected_podcast = None
+
+        self.add_buttons(
+            _('_Cancel'), Gtk.ResponseType.CANCEL,
+            _('_Use Selected'), Gtk.ResponseType.OK,
+        )
+        self.set_default_response(Gtk.ResponseType.OK)
+        self.set_border_width(12)
+        self.set_default_size(900, 520)
+
+        area = self.get_content_area()
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        outer.set_hexpand(True)
+        outer.set_vexpand(True)
+        area.add(outer)
+
+        search_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        outer.pack_start(search_row, False, False, 0)
+
+        self.search_entry = Gtk.Entry()
+        self.search_entry.set_hexpand(True)
+        self.search_entry.set_text(initial_query or '')
+        self.search_entry.set_activates_default(False)
+        search_row.pack_start(self.search_entry, True, True, 0)
+
+        self.search_button = Gtk.Button.new_with_label(_('Search'))
+        self.search_button.connect('clicked', self.on_search_clicked)
+        search_row.pack_start(self.search_button, False, False, 0)
+
+        self.status_label = Gtk.Label(label='', xalign=0)
+        outer.pack_start(self.status_label, False, False, 0)
+
+        self.store = Gtk.ListStore(str, str, str, str, str, object)
+
+        self.tree = Gtk.TreeView(model=self.store)
+        self.tree.set_headers_visible(True)
+
+        for title, column_id, width in (
+            (_('Title'), self.COL_TITLE, 240),
+            (_('Feed URL'), self.COL_FEED_URL, 300),
+            (_('Website'), self.COL_WEBSITE_URL, 220),
+            (_('Source'), self.COL_SOURCE, 100),
+        ):
+            renderer = Gtk.CellRendererText()
+            renderer.set_property('ellipsize', 3)  # Pango.EllipsizeMode.END without new import
+            column = Gtk.TreeViewColumn(title, renderer, text=column_id)
+            column.set_resizable(True)
+            column.set_min_width(width)
+            self.tree.append_column(column)
+
+        selection = self.tree.get_selection()
+        selection.set_mode(Gtk.SelectionMode.SINGLE)
+        selection.connect('changed', self.on_selection_changed)
+
+        self.tree.connect('row-activated', self.on_row_activated)
+
+        sw = Gtk.ScrolledWindow()
+        sw.set_hexpand(True)
+        sw.set_vexpand(True)
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        sw.add(self.tree)
+        outer.pack_start(sw, True, True, 0)
+
+        self.description = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD)
+        self.description.set_editable(False)
+        self.description.set_cursor_visible(False)
+
+        desc_sw = Gtk.ScrolledWindow()
+        desc_sw.set_hexpand(True)
+        desc_sw.set_vexpand(False)
+        desc_sw.set_min_content_height(120)
+        desc_sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        desc_sw.add(self.description)
+        outer.pack_start(desc_sw, False, True, 0)
+
+        self.show_all()
+
+        if initial_query:
+            GLib.idle_add(self.on_search_clicked, self.search_button)
+
+    def on_search_clicked(self, button):
+        query = self.search_entry.get_text().strip()
+        if not query:
+            self.status_label.set_text(_('Enter a podcast name or keyword to search.'))
+            return
+
+        self.store.clear()
+        self.selected_podcast = None
+        self._set_description('')
+        self.status_label.set_text(_('Searching...'))
+
+        while Gtk.events_pending():
+            Gtk.main_iteration_do(False)
+
+        try:
+            service = podcastmetadata.create_metadata_service(self.config)
+            podcasts = service.search_podcasts(query, limit=50)
+        except Exception as exc:
+            logger.warning('Podcast metadata search failed', exc_info=True)
+            self.status_label.set_text(_('Search failed: %s') % str(exc))
+            return
+
+        for podcast in podcasts:
+            self.store.append([
+                podcast.title or '',
+                podcast.feed_url or '',
+                podcast.website_url or '',
+                podcast.source or '',
+                podcast.description or '',
+                podcast,
+            ])
+
+        if podcasts:
+            self.status_label.set_text(
+                _('Found %(count)d result(s). Select one and click Use Selected.') %
+                {'count': len(podcasts)}
+            )
+        else:
+            self.status_label.set_text(_('No matching podcasts were found.'))
+
+    def on_selection_changed(self, selection):
+        model, tree_iter = selection.get_selected()
+        if tree_iter is None:
+            self.selected_podcast = None
+            self._set_description('')
+            return
+
+        self.selected_podcast = model[tree_iter][self.COL_OBJECT]
+        self._set_description(model[tree_iter][self.COL_DESCRIPTION] or '')
+
+    def on_row_activated(self, tree, path, column):
+        selection = tree.get_selection()
+        self.on_selection_changed(selection)
+        self.response(Gtk.ResponseType.OK)
+
+    def _set_description(self, text):
+        buf = self.description.get_buffer()
+        buf.set_text(text or '')
+
+    def get_selected_podcast(self):
+        return self.selected_podcast
+
 class ManualPodcastDialog(Gtk.Dialog):
-    def __init__(self, parent, podcast=None):
+    def __init__(self, parent, config, podcast=None):
+        self.config = config
         self.podcast = podcast
+        self.metadata_image_url = None
         is_edit = podcast is not None
         super().__init__(
             title=_('Edit selected podcast') if is_edit else _('Add podcast manually'),
@@ -298,6 +464,12 @@ class ManualPodcastDialog(Gtk.Dialog):
         # Add a field for podcast title.
         self.podcast_title_entry = Gtk.Entry()
         self.podcast_title_entry.set_activates_default(True)
+
+        self.find_metadata_button = Gtk.Button.new_with_label(_('Find online...'))
+        self.find_metadata_button.set_tooltip_text(
+            _('Search online podcast metadata providers and copy selected metadata into this form.')
+        )
+        self.find_metadata_button.connect('clicked', self.on_find_metadata_clicked)
 
         # Add a field for the feed URL - allows users to set a custom URL.
         self.podcast_feed_url_entry = Gtk.Entry()
@@ -321,8 +493,14 @@ class ManualPodcastDialog(Gtk.Dialog):
         # Loop through the fields and add them to the grid with labels in the
         # first column and widgets in the second column.
         row = 0
+
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        title_box.set_hexpand(True)
+        title_box.pack_start(self.podcast_title_entry, True, True, 0)
+        title_box.pack_start(self.find_metadata_button, False, False, 0)
+
         for label, widget in (
-            (_('Title'), self.podcast_title_entry),
+            (_('Title'), title_box),
             (_('Feed URL'), self.podcast_feed_url_entry),
             (_('Website Link'), self.podcast_website_link_entry),
             (_('Section'), self.podcast_section_entry),
@@ -351,6 +529,51 @@ class ManualPodcastDialog(Gtk.Dialog):
 
         self.show_all()
 
+    def on_find_metadata_clicked(self, button):
+        query = self.podcast_title_entry.get_text().strip()
+
+        dialog = ManualPodcastMetadataSearchDialog(
+            self,
+            self.config,
+            initial_query=query,
+        )
+
+        try:
+            response = dialog.run()
+            if response == Gtk.ResponseType.OK:
+                metadata = dialog.get_selected_podcast()
+                if metadata is not None:
+                    self.apply_metadata(metadata)
+        finally:
+            dialog.destroy()
+
+    def apply_metadata(self, metadata):
+        """Copy selected online metadata into the manual podcast form.
+
+        This intentionally overwrites fields in the dialog only. The user still
+        has to click Add/Save before anything is written to the database.
+        """
+
+        if metadata.title:
+            self.podcast_title_entry.set_text(metadata.title)
+
+        if metadata.feed_url:
+            self.podcast_feed_url_entry.set_text(metadata.feed_url)
+
+        if metadata.website_url:
+            self.podcast_website_link_entry.set_text(metadata.website_url)
+
+        if metadata.description:
+            buf = self.podcast_description.get_buffer()
+            buf.set_text(metadata.description)
+
+        if metadata.categories:
+            # Optional. This is a reasonable default, but you may prefer always using "Other".
+            self.podcast_section_entry.set_text(metadata.categories[0] or _('Other'))
+
+        if metadata.image_url:
+            self.metadata_image_url = metadata.image_url
+
     def get_data(self):
         buf = self.podcast_description.get_buffer()
         return {
@@ -359,6 +582,7 @@ class ManualPodcastDialog(Gtk.Dialog):
             'link': self.podcast_website_link_entry.get_text().strip(),
             'section': self.podcast_section_entry.get_text().strip() or _('Other'),
             'description': buf.get_text(buf.get_start_iter(), buf.get_end_iter(), True).strip(),
+            'cover_url': self.metadata_image_url,
         }
 
 
@@ -814,7 +1038,7 @@ class ManualEntryController(object):
     def open_manual_add_podcast_dialog(self):
         """Open the dialog to manually create a new podcast."""
 
-        dialog = ManualPodcastDialog(self.ui.main_window)
+        dialog = ManualPodcastDialog(self.ui.main_window, self.ui.config)
         try:
             # Loop to allow the user to fix validation issues in the dialog without having
             # to re-enter all the data again. The dialog will only close when the user clicks
@@ -850,7 +1074,7 @@ class ManualEntryController(object):
         if podcast is None:
             return
 
-        dialog = ManualPodcastDialog(self.ui.main_window, podcast=podcast)
+        dialog = ManualPodcastDialog(self.ui.main_window, self.ui.config, podcast=podcast)
         try:
             # Loop to allow the user to fix validation issues in the dialog without having
             # to re-enter all the data again. The dialog will only close when the user clicks
@@ -963,7 +1187,7 @@ class ManualEntryController(object):
         finally:
             dialog.destroy()
 
-    def create_manual_podcast(self, title, url, description='', link='', section=''):
+    def create_manual_podcast(self, title, url, description='', link='', section='', cover_url=None):
         """Create a new podcast with the provided data from the add dialog."""
 
         # Verify a title was specified.
@@ -1001,7 +1225,7 @@ class ManualEntryController(object):
         podcast.title = title
         podcast.link = link.strip()
         podcast.description = description.strip()
-        podcast.cover_url = None
+        podcast.cover_url = cover_url
         podcast.payment_url = None
         podcast.section = (section or '').strip() or _('Other')
         podcast.download_folder = None
@@ -1012,7 +1236,7 @@ class ManualEntryController(object):
 
         return podcast
 
-    def update_manual_podcast(self, podcast, title, url, link='', section='', description=''):
+    def update_manual_podcast(self, podcast, title, url, link='', section='', description='', cover_url=None):
         """Update the selected podcast with the provided data from the edit dialog."""
 
         title = (title or '').strip()
@@ -1078,6 +1302,8 @@ class ManualEntryController(object):
         podcast.link = link.strip()
         podcast.description = description.strip()
         podcast.section = (section or '').strip() or _('Other')
+        if cover_url:
+            podcast.cover_url = cover_url
         podcast.save()
         self.ui.db.commit()  #RobL
 

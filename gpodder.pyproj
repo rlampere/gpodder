@@ -101,6 +101,7 @@
     <Compile Include="src\gpodder\player.py" />
     <Compile Include="src\gpodder\plugins\soundcloud.py" />
     <Compile Include="src\gpodder\plugins\__init__.py" />
+    <Compile Include="src\gpodder\podcastmetadata.py" />
     <Compile Include="src\gpodder\query.py" />
     <Compile Include="src\gpodder\registry.py" />
     <Compile Include="src\gpodder\schema.py" />

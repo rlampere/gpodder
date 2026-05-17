@@ -28,7 +28,7 @@ import urllib.parse
 import urllib.request
 
 import gpodder
-from gpodder import opml, util
+from gpodder import opml, util, podcastmetadata
 
 _ = gpodder.gettext
 
@@ -104,6 +104,22 @@ def directory_entry_from_mygpo_json(url):
 
     return [DirectoryEntry(d['title'], d['url'], d['logo_url'], d['subscribers'], d['description'])
             for d in r.json()]
+
+
+#RobL--v
+def directory_entry_from_metadata_podcasts(podcasts):
+    return [
+        DirectoryEntry(
+            podcast.title or podcast.feed_url,
+            podcast.feed_url,
+            podcast.image_url,
+            -1,
+            podcast.description
+        )
+        for podcast in podcasts
+        if podcast.feed_url
+    ]
+#RobL--^
 
 
 class GPodderNetSearchProvider(Provider):
@@ -210,16 +226,68 @@ class FixedOpmlFileProvider(Provider):
     def on_static(self):
         return directory_entry_from_opml(self.filename)
 
+#RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+
+class PodcastIndexSearchProvider(Provider):
+    def __init__(self):
+        self.name = _('Podcast Index search')
+        self.kind = Provider.PROVIDER_SEARCH
+        self.icon = 'directory-podcastindex.png'
+
+    def on_search(self, query):
+        config = getattr(gpodder, 'config', None)
+        if config is None:
+            raise JustAWarning(_('Podcast Index is not configured.'))
+
+        if not config.metadata.podcast_index.enabled:
+            raise JustAWarning(_('Podcast Index search is disabled.'))
+
+        service = podcastmetadata.create_metadata_service(config)
+
+        # Use only the Podcast Index provider here; do not also call RSS.
+        provider = podcastmetadata.PodcastIndexMetadataProvider(
+            api_key=config.metadata.podcast_index.api_key,
+            api_secret=config.metadata.podcast_index.api_secret,
+            user_agent='gPodder+/1.0'
+        )
+
+        podcasts = provider.search_podcasts(query, limit=50)
+        return directory_entry_from_metadata_podcasts(podcasts)
+
+
+class AppleITunesSearchProvider(Provider):
+    def __init__(self):
+        self.name = _('Apple Podcasts search')
+        self.kind = Provider.PROVIDER_SEARCH
+        self.icon = 'directory-apple.png'
+
+    def on_search(self, query):
+        provider = podcastmetadata.AppleITunesSearchMetadataProvider()
+        podcasts = provider.search_podcasts(query, limit=50)
+        return directory_entry_from_metadata_podcasts(podcasts)
+
+
+#PROVIDERS = [
+#    GPodderRecommendationsProvider,
+#    None,
+#    GPodderNetSearchProvider,
+#    GPodderNetToplistProvider,
+#    # GPodderNetTagsProvider,
+#    None,
+#    OpmlWebImportProvider,
+#    # OpmlFileImportProvider,
+#    None,
+#    SoundcloudSearchProvider,
+#]
 
 PROVIDERS = [
-    GPodderRecommendationsProvider,
-    None,
-    GPodderNetSearchProvider,
-    GPodderNetToplistProvider,
-    # GPodderNetTagsProvider,
-    None,
-    OpmlWebImportProvider,
-    # OpmlFileImportProvider,
-    None,
-    SoundcloudSearchProvider,
+    GPodderNetSearchProvider,       # Podcast Index search
+    PodcastIndexSearchProvider,     # gpodder.net search
+    AppleITunesSearchProvider,      # Apple iTunes Podcasts search
+    OpmlWebImportProvider,          # OPML from web
+    OpmlFileImportProvider,         # OPML from file
+    GPodderRecommendationsProvider, # Getting started
+    GPodderNetToplistProvider,      # Top 50
+    SoundcloudSearchProvider,       # SoundCloud
 ]
+#RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-

@@ -2727,7 +2727,7 @@ class gPodder(BuilderWidget):
         self.show_podcast_details_menuitem.set_enabled(state)
         self.update_selected_podcast_menuitem.set_enabled(state)
         self.manual_edit_podcast_menuitem.set_enabled(state)
-        self.manual_add_podcast_menuitem.set_enabled(state)
+        #self.manual_add_podcast_menuitem.set_enabled(state)
         self.manual_add_episode_selected_podcast_menuitem.set_enabled(state)
         self.manual_add_episode_batch_selected_podcast_menuitem.set_enabled(state)
         self.all_episodes_new_selected_podcast_menuitem.set_enabled(state)

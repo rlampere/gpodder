@@ -244,7 +244,21 @@ defaults = {
         'proxy_username': '',
         'proxy_password': '',
     },
-
+    #RobL--v
+    # Added feature to obtain podcast metadata from online sources.
+    'metadata': {
+        'podcast_index': {
+            'enabled': False,
+            'api_key': '',
+            'api_secret': '',
+        },
+        'apple_itunes': {
+            'enabled': True,
+        },
+        'enrich_on_add': False,
+        'enrich_on_update': False,
+    },
+    #RobL--^
     'extensions': {
         'enabled': [],
     },
