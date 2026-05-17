@@ -285,6 +285,11 @@
             <attribute name="label" translatable="yes">_View</attribute>
             <section>
                 <item>
+                    <attribute name="action">win.viewDarkMode</attribute>
+                    <attribute name="label" translatable="yes">Dark Mode</attribute>
+                    <attribute name="accel">&lt;Primary&gt;m</attribute>
+                </item>
+                <item>
                     <attribute name="action">win.showToolbar</attribute>
                     <attribute name="label" translatable="yes">Toolbar</attribute>
                     <attribute name="accel">&lt;Primary&gt;t</attribute>

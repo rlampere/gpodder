@@ -1226,7 +1226,7 @@ class PodcastChannel(PodcastModelObject):
                         break
 
             if not found and not util.is_system_file(filename):
-                logger.warning('Unknown external file: %s', filename)
+                logger.info('Unknown external file: %s', filename)  #RobL - Formerly logger.warning
 
     @classmethod
     def sort_key(cls, podcast):

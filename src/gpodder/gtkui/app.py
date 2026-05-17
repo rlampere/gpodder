@@ -39,7 +39,7 @@ from gpodder.model import check_root_folder_path
 from .config import UIConfig
 from .desktop.preferences import gPodderPreferences
 from .main import gPodder
-from .model import Model
+from .model import Model, GUITheme  #RobL
 
 import gi  # isort:skip
 gi.require_version('Gtk', '3.0')  # isort:skip
@@ -295,6 +295,16 @@ class gPodderApplication(Gtk.Application):
     def set_dark_mode(self, dark):
         settings = Gtk.Settings.get_default()
         settings.props.gtk_application_prefer_dark_theme = 1 if dark else 0
+
+        #RobL--v
+        # Includes additions for gPodder+ CSS feature.
+        GUITheme.set_dark_mode(dark)
+
+        if self.window is not None:
+            self.window.load_custom_gtk_css()
+            self.window.update_episode_list_model()
+            self.window.update_podcast_list_model()
+        #RobL--^
 
     def read_portal_color_scheme(self):
         gpodder.dbus_session_bus.call_async(

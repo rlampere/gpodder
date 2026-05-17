@@ -41,72 +41,134 @@ _ = gpodder.gettext
 logger = logging.getLogger(__name__)
 
 #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
-# Constants used to define a color themes and styles for the gPodder+ UI.
+# Definitions for color themes and styles used by the gPodder+ UI.
 class GUITheme:
-    APP_STATUS_BG_COLOR = '#FFFFFF'      # White
-    APP_STATUS_FG_COLOR = '#000000'      # Black
-    APP_STATUS_BORDER_COLOR = '#000000'  # Black
+    THEME_LIGHT = 'light'
+    THEME_DARK = 'dark'
 
-    EPISODE_NEW_FG_COLOR = '#000000'   # Black
-    EPISODE_NEW_STYLE_BEG = '<b>'      # Bold
-    EPISODE_NEW_STYLE_END = '</b>'     # Bold
+    _active_theme = THEME_LIGHT
 
-    EPISODE_OLD_FG_COLOR = '#0000FF'   # Blue
-    EPISODE_OLD_STYLE_BEG = '<i>'      # Italic
-    EPISODE_OLD_STYLE_END = '</i>'     # Italic
+    LIGHT_COLORS = {
+        'APP_STATUS_BG': '#FFFFFF',         # White
+        'APP_STATUS_FG': '#000000',         # Black
+        'APP_STATUS_BORDER': '#000000',     # Black
 
-    EPISODE_DEL_FG_COLOR = '#FF0000'   # Red
-    EPISODE_DEL_STYLE_BEG = ''         # Normal
-    EPISODE_DEL_STYLE_END = ''         # Normal
+        'ERROR_FG': '#C00000',              # Crimson Red / Standard Red
 
-    EPISODE_SELECT_BG_COLOR = '#98DFF0'  # Slate Blue - Light
-    EPISODE_SELECT_FG_COLOR = '#000000'  # Black
+        'EPISODE_NEW_FG': '#000000',        # Black
+        'EPISODE_OLD_FG': '#0000CC',        # Medium Blue / Deep Blue
+        'EPISODE_DEL_FG': '#CC0000',        # Pure Red / Dark Red
 
-    EPISODE_HOVER_BG_COLOR = '#48C5E5'  # Slate Blue - Medium
-    EPISODE_HOVER_FG_COLOR = '#000000'  # Black
+        'PODCAST_NEW_FG': '#0000CC',        # Medium Blue / Deep Blue
+        'PODCAST_OLD_FG': '#000000',        # Black
 
-    PODCAST_SECTION_BG_COLOR = '#136E85'  # Slate Blue - Dark
-    PODCAST_SECTION_FG_COLOR = '#FFFFFF'  # White
-    PODCAST_SECTION_STYLE_BEG = '<b>'     # Bold
-    PODCAST_SECTION_STYLE_END = '</b>'    # Bold
+        'PODCAST_SECTION_BG': '#136E85',    # Deep Cerulean / Muted Teal
+        'PODCAST_SECTION_FG': '#FFFFFF',    # White
 
-    PODCAST_SELECT_BG_COLOR = '#98DFF0'  # Slate Blue - Light
-    PODCAST_SELECT_FG_COLOR = '#000000'  # Black
+        'EPISODE_SELECT_BG': '#98DFF0',     # Pale Ice Blue / Soft Cyan
+        'EPISODE_SELECT_FG': '#000000',     # Black
+        'EPISODE_HOVER_BG': '#48C5E5',      # Bright Sky Blue / Vibrant Turquoise
+        'EPISODE_HOVER_FG': '#000000',      # Black
 
-    PODCAST_HOVER_BG_COLOR = '#48C5E5'  # Slate Blue - Medium
-    PODCAST_HOVER_FG_COLOR = '#000000'  # Black
+        'PODCAST_SELECT_BG': '#98DFF0',     # Pale Ice Blue / Soft Cyan
+        'PODCAST_SELECT_FG': '#000000',     # Black
+        'PODCAST_HOVER_BG': '#48C5E5',      # Bright Sky Blue / Vibrant Turquoise
+        'PODCAST_HOVER_FG': '#000000',      # Black
+    }
 
-    GPODDER_PLUS_CSS = f"""
+    DARK_COLORS = {
+        'APP_STATUS_BG': '#202124',         # Dark Charcoal / Google Gray
+        'APP_STATUS_FG': '#E8EAED',         # Platinum White
+        'APP_STATUS_BORDER': '#5F6368',     # Granite Gray
+
+        'ERROR_FG': '#FF8A80',              # Pastel Coral / Light Red
+
+        'EPISODE_NEW_FG': '#FFFDE7',        # Chiffon White
+        'EPISODE_OLD_FG': '#4285F4',        # Google Blue
+        'EPISODE_DEL_FG': '#FF8A80',        # Pastel Coral / Light Red
+
+        'PODCAST_NEW_FG': '#8AB4F8',        # Light Cornflower Blue
+        'PODCAST_OLD_FG': '#FFFDE7',        # Chiffon White - was #E8EAED
+
+        'PODCAST_SECTION_BG': '#164E63',    # Dark Cyan / Deep Teal
+        'PODCAST_SECTION_FG': '#FFFFFF',    # White
+
+        'EPISODE_SELECT_BG': '#34515E',     # Blue Slate / Dark Steel Blue
+        'EPISODE_SELECT_FG': '#FFFFFF',     # White
+        'EPISODE_HOVER_BG': '#406878',      #Muted Denim / Smokey Teal
+        'EPISODE_HOVER_FG': '#FFFFFF',      # White
+
+        'PODCAST_SELECT_BG': '#34515E',     # Blue Slate or Dark Steel Blue
+        'PODCAST_SELECT_FG': '#FFFFFF',     # White
+        'PODCAST_HOVER_BG': '#406878',      # Muted Denim / Smokey Teal
+        'PODCAST_HOVER_FG': '#FFFFFF',      # White
+    }
+
+    EPISODE_NEW_STYLE_BEG = '<b>'
+    EPISODE_NEW_STYLE_END = '</b>'
+
+    EPISODE_OLD_STYLE_BEG = '<i>'
+    EPISODE_OLD_STYLE_END = '</i>'
+
+    EPISODE_DEL_STYLE_BEG = ''
+    EPISODE_DEL_STYLE_END = ''
+
+    PODCAST_NEW_STYLE_BEG = '<span weight="bold"><i>'
+    PODCAST_NEW_STYLE_END = '</i></span>'
+
+    PODCAST_OLD_STYLE_BEG = '<b>'
+    PODCAST_OLD_STYLE_END = '</b>'
+
+    PODCAST_SECTION_STYLE_BEG = '<b>'
+    PODCAST_SECTION_STYLE_END = '</b>'
+
+    @classmethod
+    def set_dark_mode(cls, dark):
+        cls._active_theme = cls.THEME_DARK if dark else cls.THEME_LIGHT
+
+    @classmethod
+    def colors(cls):
+        return cls.DARK_COLORS if cls._active_theme == cls.THEME_DARK else cls.LIGHT_COLORS
+
+    @classmethod
+    def color(cls, name):
+        return cls.colors()[name]
+
+    @classmethod
+    def get_css(cls):
+        c = cls.colors()
+
+        return f"""
             #app-status-bar {{
-            background-color: {APP_STATUS_BG_COLOR};
-            color: {APP_STATUS_FG_COLOR};
-            border-top: 1px solid {APP_STATUS_BORDER_COLOR};
-            padding: 3px 6px;
-        }}
+                background-color: {c['APP_STATUS_BG']};
+                color: {c['APP_STATUS_FG']};
+                border-top: 1px solid {c['APP_STATUS_BORDER']};
+                padding: 3px 6px;
+            }}
 
-        #podcast-list.view:selected,
-        #podcast-list.view:selected:focus {{
-            background-color: {PODCAST_SELECT_BG_COLOR};
-            color: {PODCAST_SELECT_FG_COLOR};
-        }}
+            #podcast-list.view:selected,
+            #podcast-list.view:selected:focus {{
+                background-color: {c['PODCAST_SELECT_BG']};
+                color: {c['PODCAST_SELECT_FG']};
+            }}
 
-        #podcast-list.view:selected:hover,
-        #podcast-list.view:selected:focus:hover {{
-            background-color: {PODCAST_HOVER_BG_COLOR};
-            color: {PODCAST_HOVER_FG_COLOR};
-        }}
+            #podcast-list.view:selected:hover,
+            #podcast-list.view:selected:focus:hover {{
+                background-color: {c['PODCAST_HOVER_BG']};
+                color: {c['PODCAST_HOVER_FG']};
+            }}
 
-        #episode-list.view:selected,
-        #episode.view:selected:focus {{
-            background-color: {EPISODE_SELECT_BG_COLOR};
-            color: {EPISODE_SELECT_FG_COLOR};
-        }}
+            #episode-list.view:selected,
+            #episode-list.view:selected:focus {{
+                background-color: {c['EPISODE_SELECT_BG']};
+                color: {c['EPISODE_SELECT_FG']};
+            }}
 
-        #episode.view:selected:hover,
-        #episode.view:selected:focus:hover {{
-            background-color: {EPISODE_HOVER_BG_COLOR};
-            color: {EPISODE_HOVER_FG_COLOR};
-        }}
+            #episode-list.view:selected:hover,
+            #episode-list.view:selected:focus:hover {{
+                background-color: {c['EPISODE_HOVER_BG']};
+                color: {c['EPISODE_HOVER_FG']};
+            }}
         """
 #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
 
@@ -359,21 +421,22 @@ class EpisodeListModel(Gtk.ListStore):
     def _format_description(self, episode):
         d = []
 
-        #RobL--^
-        # Display the episode title differently based on its state using the GUITheme constants defined above.
+        #RobL--v
+        # Display the episode title differently based on its state using the GUITheme definitions above.
         title = episode.trimmed_title if self._config_ui_gtk_episode_list_trim_title_prefix else episode.title
         escaped_title = html.escape(title)
-        if episode.state != gpodder.STATE_DELETED and episode.is_new:        # New episodes
+
+        if episode.state != gpodder.STATE_DELETED and episode.is_new:
             d.append(
-                f'<span foreground="{GUITheme.EPISODE_NEW_FG_COLOR}">'
+                f'<span foreground="{GUITheme.color("EPISODE_NEW_FG")}">'
                 f'{GUITheme.EPISODE_NEW_STYLE_BEG}'
                 f'{escaped_title}'
                 f'{GUITheme.EPISODE_NEW_STYLE_END}'
                 f'</span>'
             )
-        elif episode.state != gpodder.STATE_DELETED and not episode.is_new:  # Old episodes
+        elif episode.state != gpodder.STATE_DELETED and not episode.is_new:
             d.append(
-                f'<span foreground="{GUITheme.EPISODE_OLD_FG_COLOR}">'
+                f'<span foreground="{GUITheme.color("EPISODE_OLD_FG")}">'
                 f'{GUITheme.EPISODE_OLD_STYLE_BEG}'
                 f'{escaped_title}'
                 f'{GUITheme.EPISODE_OLD_STYLE_END}'
@@ -381,7 +444,7 @@ class EpisodeListModel(Gtk.ListStore):
             )
         else:
             d.append(
-                f'<span foreground="{GUITheme.EPISODE_DEL_FG_COLOR}">'       # Deleted episodes
+                f'<span foreground="{GUITheme.color("EPISODE_DEL_FG")}">'
                 f'{GUITheme.EPISODE_DEL_STYLE_BEG}'
                 f'{escaped_title}'
                 f'{GUITheme.EPISODE_DEL_STYLE_END}'
@@ -886,13 +949,19 @@ class PodcastListModel(Gtk.ListStore):
         #RobL--v
         d = []
         if new:
-            d.append('<span foreground="Blue"><span weight="bold"><i>')
+            d.append(
+                f'<span foreground="{GUITheme.color("PODCAST_NEW_FG")}">'
+                f'{GUITheme.PODCAST_NEW_STYLE_BEG}'
+            )
             d.append(title_markup)
-            d.append('</i></span></span>')
+            d.append(f'{GUITheme.PODCAST_NEW_STYLE_END}</span>')
         else:
-            d.append('<span foreground="Black"><b>')
+            d.append(
+                f'<span foreground="{GUITheme.color("PODCAST_OLD_FG")}">'
+                f'{GUITheme.PODCAST_OLD_STYLE_BEG}'
+            )
             d.append(title_markup)
-            d.append('</b></span>')
+            d.append(f'{GUITheme.PODCAST_OLD_STYLE_END}</span>')
         #RobL--^
 
         if channel._update_error is not None:
@@ -934,8 +1003,8 @@ class PodcastListModel(Gtk.ListStore):
                     True, True,
                     # C_VIEW_SHOW_UNPLAYED, C_HAS_EPISODES, C_SEPARATOR
                     True, True, False,
-                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND      #RobL
-                    0, False, section.title, GUITheme.PODCAST_SECTION_BG_COLOR)  #RobL
+                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND         #RobL
+                    0, False, section.title, GUITheme.color('PODCAST_SECTION_BG'))  #RobL
 
         if config.ui.gtk.podcast_list.all_episodes and channels:
             all_episodes = PodcastChannelProxy(db, config, channels, '', self)
@@ -1041,7 +1110,7 @@ class PodcastListModel(Gtk.ListStore):
 
             # The section header is styled based on the GUITheme constants defined above.
             description = (
-                f'<span foreground="{GUITheme.PODCAST_SECTION_FG_COLOR}">'
+                f'<span foreground="{GUITheme.color("PODCAST_SECTION_FG")}">'
                 f'{GUITheme.PODCAST_SECTION_STYLE_BEG}{html.escape(section_text)}'
                 f'{GUITheme.PODCAST_SECTION_STYLE_END}</span>'
             )

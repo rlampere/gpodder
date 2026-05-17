@@ -400,14 +400,14 @@ class gPodder(BuilderWidget):
         #RobL--v
         # Defer start of finding partial downloads until the UI is usable.
         defer_secs=1  # Number of seconds to defer start
-        print(f'Scheduling deferred scan for partial downloads - wait %s seconds' % defer_secs)
+        logger.info(f'Scheduling deferred scan for partial downloads - wait %s seconds' % defer_secs)
         GLib.timeout_add_seconds(defer_secs, self.find_partial_downloads_deferred)
         #RobL--^
 
         #RobL--v
         # Defer slow network-share download-folder checks until the UI is usable.
         defer_secs+=2  # Number of seconds to defer start
-        print(f'Scheduling deferred check of download folders - wait %s seconds' % defer_secs)
+        logger.info(f'Scheduling deferred check of download folders - wait %s seconds' % defer_secs)
         GLib.timeout_add_seconds(defer_secs, self.check_download_folders_deferred)
         #RobL--^
 
@@ -469,8 +469,13 @@ class gPodder(BuilderWidget):
         # Menubar -> View (General Options)
         # ---------------------------------
         action = Gio.SimpleAction.new_stateful(
+            'viewDarkMode', None, GLib.Variant.new_boolean(self.config.ui.gtk.color_scheme == 'dark'))
+        action.connect('activate', self.on_toggle_view_dark_mode)
+        g.add_action(action)
+
+        action = Gio.SimpleAction.new_stateful(
             'showToolbar', None, GLib.Variant.new_boolean(self.config.ui.gtk.toolbar))
-        action.connect('activate', self.on_itemShowToolbar_activate)
+        action.connect('activate', self.on_show_toolbar)  #RobL - Formerly on_itemShowToolbar_activate
         g.add_action(action)
 
         action = Gio.SimpleAction.new_stateful(
@@ -692,7 +697,8 @@ class gPodder(BuilderWidget):
 
         self.bluetooth_episodes_action.set_enabled(self.bluetooth_available)
 
-        self.set_podcast_menu_item_actions()  #RobL
+        self.set_episode_menu_item_actions()  # Initialize Episode menu item actions
+        self.set_podcast_menu_item_actions()  # Initialize Podcast menu item actions
 
     def on_resume_all_infobar_response(self, infobar, response_id):
         if response_id == Gtk.ResponseType.OK:
@@ -859,16 +865,18 @@ class gPodder(BuilderWidget):
     # string, and adding it to the default screen's style context with application
     # priority.
     def load_custom_gtk_css(self):
-        css = GUITheme.GPODDER_PLUS_CSS.encode("utf-8")
+        css = GUITheme.get_css().encode("utf-8")
 
-        provider = Gtk.CssProvider()
-        provider.load_from_data(css)
+        if not hasattr(self, 'gpodder_plus_css_provider'):
+            self.gpodder_plus_css_provider = Gtk.CssProvider()
 
-        Gtk.StyleContext.add_provider_for_screen(
-            Gdk.Screen.get_default(),
-            provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
+            Gtk.StyleContext.add_provider_for_screen(
+                Gdk.Screen.get_default(),
+                self.gpodder_plus_css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+        self.gpodder_plus_css_provider.load_from_data(css)
     #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
 
     #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
@@ -1896,10 +1904,14 @@ class gPodder(BuilderWidget):
         elif name == 'ui.gtk.episode_list.columns':
             self.update_episode_list_columns_visibility()
         elif name == 'ui.gtk.color_scheme':
-            if new_value == 'system':
-                self.application.read_portal_color_scheme()
-            else:
-                self.application.set_dark_mode(new_value == 'dark')
+            dark = (new_value == 'dark')                            #RobL - Supports toggling dark/light mode
+            action = self.gPodder.lookup_action('viewDarkMode')     #RobL
+            if action is not None:                                  #RobL
+                action.set_state(GLib.Variant.new_boolean(dark))    #RobL
+            if new_value == 'system':                               #RobL
+                self.application.read_portal_color_scheme()         #RobL
+            else:                                                   #RobL
+                self.application.set_dark_mode(dark)                #RobL
         elif name == 'limit.downloads.concurrent_max':
             # Do not allow value to be set below 1
             if new_value < 1:
@@ -1965,7 +1977,12 @@ class gPodder(BuilderWidget):
                 error_str = model.get_value(iterator, PodcastListModel.C_ERROR)
                 if error_str:
                     error_str = _('Feedparser error: %s') % html.escape(error_str.strip())
-                    error_str = '<span foreground="#ff0000">%s</span>' % error_str
+                    #error_str = '<span foreground="#ff0000">%s</span>' % error_str #RobL
+                    error_str = (                                                   #RobL
+                        f'<span foreground="{GUITheme.color("ERROR_FG")}">'         #RobL
+                        f'{error_str}'                                              #RobL
+                        f'</span>'                                                  #RobL
+                    )                                                               #RobL
 
                 box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
                 box.set_border_width(5)
@@ -2751,8 +2768,10 @@ class gPodder(BuilderWidget):
             GLib.Variant.new_boolean(all_episodes_are_locked))
     #RobL--v
 
-    def set_episode_actions(self, open_instead_of_play=False, can_play=False, can_force=False, can_download=False,
-                            can_pause=False, can_cancel=False, can_delete=False, can_lock=False, is_episode_selected=False):
+    def set_episode_menu_item_actions(self, open_instead_of_play=False, can_play=False,  #RobL - Renamed from set_episode_actions
+                                      can_force=False, can_download=False, can_pause=False,
+                                      can_cancel=False, can_delete=False, can_lock=False,
+                                      is_episode_selected=False):
         episodes = self.get_selected_episodes() if is_episode_selected else []
 
         # play icon and label
@@ -2908,6 +2927,10 @@ class gPodder(BuilderWidget):
         self.episode_list_status_changed(episodes)
 
     def play_or_download(self):
+        """Recalculates episode-related actions that may be taken (via menu items
+           located in the menu bar and context menus) when a change occurs to and
+           episode or podcast. Note: This does not play or download any episodes
+           despite the name."""
         if not self.in_downloads_list():
             (open_instead_of_play, can_play, can_preview, can_download,
              can_pause, can_cancel, can_delete, can_lock) = (False,) * 8
@@ -2937,8 +2960,9 @@ class gPodder(BuilderWidget):
                     can_delete = can_delete or episode.can_delete()
                     can_lock = can_lock or episode.can_lock()
 
-            self.set_episode_actions(open_instead_of_play, can_play, False, can_download, can_pause, can_cancel, can_delete, can_lock,
-                                    selection.count_selected_rows() > 0)
+            self.set_episode_menu_item_actions(open_instead_of_play, can_play, False, can_download, #RobL - renamed from set_episode_actions
+                                               can_pause, can_cancel, can_delete, can_lock,
+                                               selection.count_selected_rows() > 0)
             self.set_podcast_menu_item_actions()  #RobL
 
             return (open_instead_of_play, can_play, can_preview, can_download,
@@ -2973,7 +2997,8 @@ class gPodder(BuilderWidget):
             else:
                 can_force = False
 
-            self.set_episode_actions(False, False, can_force, can_queue, can_pause, can_cancel, can_remove, False, False)
+            self.set_episode_menu_item_actions(False, False, can_force, can_queue,  #RobL - Renamed from set_episode_actions
+                                               can_pause, can_cancel, can_remove, False, False)
             self.set_podcast_menu_item_actions()  #RobL
 
             return (False, False, False, can_queue, can_pause, can_cancel,
@@ -3932,7 +3957,8 @@ class gPodder(BuilderWidget):
 
         self.on_selected_episodes_status_changed()
 
-        # Update toolbar to show available actions after lock status has changed.
+        # Recalculate episode-related actions (used to update the menu bar and context
+        # menus) that can be taken after lock status has changed.
         # Note: This does not play or download any episodes.
         self.play_or_download()
 
@@ -3962,7 +3988,8 @@ class gPodder(BuilderWidget):
 
         self.update_podcast_list_model(selected=True)
         self.update_episode_list_icons(update_all=True)
-        # Recalculate episode-related actions that can be taken after lock status has changed.
+        # Recalculate episode-related actions (used to update the menu bar and context
+        # menus) that can be taken after lock status has changed.
         # Note: This does not play or download any episodes.
         self.play_or_download()
 
@@ -4256,7 +4283,20 @@ class gPodder(BuilderWidget):
         """Called after the sync process is finished."""  # noqa: D401
         self.db.commit()
 
-    def on_itemShowToolbar_activate(self, action, param):
+    #RobL--v
+    # Allows user to easily toggle between a dark or light theme UI.
+    def on_toggle_view_dark_mode(self, action, param):
+        old_state = action.get_state().get_boolean()
+        new_state = not old_state
+
+        # Force an explicit light/dark selection.
+        # This intentionally overrides "system" mode from Preferences.
+        self.config.ui.gtk.color_scheme = 'dark' if new_state else 'light'
+
+        action.set_state(GLib.Variant.new_boolean(new_state))
+    #RobL--^
+
+    def on_show_toolbar(self, action, param):  #RobL - Formerly on_itemShowToolbar_activate
         state = action.get_state()
         self.config.ui.gtk.toolbar = not state
         action.set_state(GLib.Variant.new_boolean(not state))
