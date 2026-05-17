@@ -77,6 +77,21 @@ def parse_app_menu_for_accels(filename):
                     res.append((accel, action))
     return res
 
+#RobL--v
+def set_windows_app_user_model_id():
+    """Set Windows taskbar identity so gPodder+ is not grouped as python.exe."""
+    if sys.platform != 'win32':
+        return
+
+    try:
+        import ctypes
+
+        app_id = 'RobL.gPodderPlus.App'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(app_id)
+        logger.info('Set Windows AppUserModelID to %s', app_id)
+    except Exception:
+        logger.warning('Could not set Windows AppUserModelID', exc_info=True)
+#RobL--^
 
 class gPodderApplication(Gtk.Application):
 
@@ -133,6 +148,12 @@ class gPodderApplication(Gtk.Application):
     def do_startup(self):
         Gtk.Application.do_startup(self)
 
+        #RobL--v
+        # Set Windows AppUserModelID before creating any windows to ensure correct
+        # taskbar grouping and icon.
+        set_windows_app_user_model_id()
+        #RobL--^
+
         self.create_actions()
 
         builder = Gtk.Builder()
@@ -184,14 +205,13 @@ class gPodderApplication(Gtk.Application):
         else:
             self.set_app_menu(self.app_menu)
 
-        #RobL--^
-        #Gtk.Window.set_default_icon_name('gpodder+')  #RobL
+        #RobL--v
         try:
             # Prefer explicit icon file path (works reliably in source/dev runs)
             Gtk.Window.set_default_icon_from_file(gpodder.icon_file)
         except Exception:
             # Fallback to theme icon name for packaged/system installs
-            Gtk.Window.set_default_icon_name('gpodder')
+            Gtk.Window.set_default_icon_name('gpodder+')
         #RobL--^
 
         # FIXME: we want to get rid of dbus dependency
@@ -202,7 +222,7 @@ class gPodderApplication(Gtk.Application):
         except dbus.exceptions.DBusException as dbe:
             logger.warning('Cannot get "on the bus".', exc_info=True)
             dlg = Gtk.MessageDialog(None, Gtk.DialogFlags.MODAL, Gtk.MessageType.ERROR,
-                   Gtk.ButtonsType.CLOSE, _('Cannot start gPodder'))
+                   Gtk.ButtonsType.CLOSE, _('Cannot start gPodder+'))
             dlg.format_secondary_markup(_('D-Bus error: %s') % (str(dbe),))
             dlg.set_title('gPodder+')  #RobL
             dlg.run()
@@ -228,7 +248,7 @@ class gPodderApplication(Gtk.Application):
                 None,
             )
         except Exception as e:
-            logger.warning("Name Already clamed: %r", e, exc_info=True)
+            logger.warning("Name Already Claimed: %r", e, exc_info=True)  #RobL
         util.idle_add(self.check_root_folder_path_gui)
 
     def do_activate(self):
@@ -447,7 +467,7 @@ class gPodderApplication(Gtk.Application):
 
 
 def main(options=None):
-    GLib.set_application_name('gPodder')
+    GLib.set_application_name('gPodder+')  #RobL
 
     gp = gPodderApplication(options)
     gp.run()

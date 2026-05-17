@@ -1008,6 +1008,7 @@ class ManualEntryController(object):
         podcast.save()
         podcast.get_save_dir(force_new=True)
         podcast.save()
+        self.ui.db.commit()  #RobL
 
         return podcast
 
@@ -1078,6 +1079,7 @@ class ManualEntryController(object):
         podcast.description = description.strip()
         podcast.section = (section or '').strip() or _('Other')
         podcast.save()
+        self.ui.db.commit()  #RobL
 
         # Clear the cover art cache for both the old and new URL to ensure the cover art gets
         # properly updated in the UI. This is done whether the URL is updated or not since the
@@ -1137,6 +1139,8 @@ class ManualEntryController(object):
         if hasattr(podcast, '_determine_common_prefix'):
             podcast._determine_common_prefix()
         podcast.save()
+        self.ui.db.commit()  #RobL
+
         return episode
 
     def add_manual_episode_batch(self, podcast, media_files, is_new=True, use_file_tags=True, on_progress=None):
@@ -1202,6 +1206,7 @@ class ManualEntryController(object):
         if hasattr(podcast, '_determine_common_prefix'):
             podcast._determine_common_prefix()
         podcast.save()
+        self.ui.db.commit()  #RobL
 
         return created, errors
 
@@ -1256,6 +1261,8 @@ class ManualEntryController(object):
         if hasattr(podcast, '_determine_common_prefix'):
             podcast._determine_common_prefix()
         podcast.save()
+        self.ui.db.commit()  #RobL
+
         return episode
 
     def _apply_episode_fields(self, episode, podcast, title, published, link, guid,

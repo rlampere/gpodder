@@ -131,7 +131,7 @@ class gPodder(BuilderWidget):
         self.main_window.show()
 
         #RobL--v
-        # In Windows, the taskbar icon can shows as a Python application
+        # In Windows, the taskbar icon can show as a Python application
         # rather than the gPodder+ app. This code attempts to force an update
         # to the taskbar icon. We first set the main window icon from the
         # gPodder icon file, if possible. This is done here in the GTK UI
@@ -145,6 +145,23 @@ class gPodder(BuilderWidget):
             except Exception:
                 logger.warning('Could not set main window icon from %s',
                             gpodder.icon_file, exc_info=True)
+        #RobL--^
+
+        #RobL--v
+        def force_windows_taskbar_refresh():
+            current_title = self.gPodder.get_title()
+            self.gPodder.set_title(current_title + ' ')
+            self.set_download_progress(0.01)
+
+            def finish_refresh():
+                self.set_download_progress(0)
+                self.gPodder.set_title(current_title)
+                return False
+
+            GLib.timeout_add(250, finish_refresh)
+            return False
+
+        GLib.timeout_add(500, force_windows_taskbar_refresh)
         #RobL--^
 
         self.clear_app_status()  # RobL - Clear the general app status area.
@@ -383,14 +400,14 @@ class gPodder(BuilderWidget):
         #RobL--v
         # Defer start of finding partial downloads until the UI is usable.
         defer_secs=1  # Number of seconds to defer start
-        print(f'Scheduling deferred scan for partial downloads - wait %s seconds', defer_secs)
+        print(f'Scheduling deferred scan for partial downloads - wait %s seconds' % defer_secs)
         GLib.timeout_add_seconds(defer_secs, self.find_partial_downloads_deferred)
         #RobL--^
 
         #RobL--v
         # Defer slow network-share download-folder checks until the UI is usable.
         defer_secs+=2  # Number of seconds to defer start
-        print(f'Scheduling deferred check of download folders - wait %s seconds', defer_secs)
+        print(f'Scheduling deferred check of download folders - wait %s seconds' % defer_secs)
         GLib.timeout_add_seconds(defer_secs, self.check_download_folders_deferred)
         #RobL--^
 
@@ -402,8 +419,55 @@ class gPodder(BuilderWidget):
     def create_actions(self):
         g = self.gPodder
 
-        # View
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+        # This section has been reorganized and commented to group the action
+        # definitions by their location in the UI and their functionality,
+        # rather than just listing them in a long sequence. The first section
+        # focuses on actions used in the menubar. These actions are created
+        # using Gio.SimpleAction, which allows us to define actions with
+        # optional state (for checkboxes, radio buttons, etc.)
+        # ----------------------------------------------------------------------
+        # Actions for Stateful Menu Options (checkboxes, radio buttons, etc.)
+        # ----------------------------------------------------------------------
+        # -----------------------------------------
+        # Podcast (menubar and right-click options)
+        # -----------------------------------------
+        # Action to mark all episodes as new or old.
+        action = Gio.SimpleAction.new_stateful(
+            'allEpisodesNewSelectedPodcast', None, GLib.Variant.new_boolean(False))
+        action.connect('activate', self.on_all_episodes_new_selected_podcast)
+        g.add_action(action)
 
+        # Action to lock or unlock all episodes of the selected podcast.
+        action = Gio.SimpleAction.new_stateful(
+            'allEpisodesLockSelectedPodcast', None, GLib.Variant.new_boolean(False))  # Formerly channelAutoArchive
+        action.connect('activate', self.on_all_episodes_lock_selected_podcast)   # Formerly on_channel_toggle_lock_activate
+        g.add_action(action)
+
+        # Action to set a podcast flag indicating new episodes will be automatically
+        # locked (auto-archived) when created.
+        # Note: this applies when a podcast episode is created, not downloaded.
+        action = Gio.SimpleAction.new_stateful(
+            'autoLockNewEpisodesSelectedPodcast', None, GLib.Variant.new_boolean(False))
+        action.connect('activate', self.on_auto_lock_new_episodes_selected_podcast)
+        g.add_action(action)
+
+        # -----------------------------------------
+        # Episode (menubar and right-click options)
+        # -----------------------------------------
+        action = Gio.SimpleAction.new_stateful(
+            'episodeNew', None, GLib.Variant.new_boolean(False))
+        action.connect('activate', self.on_selected_episodes_new)
+        g.add_action(action)
+
+        action = Gio.SimpleAction.new_stateful(
+            'episodeLock', None, GLib.Variant.new_boolean(False))
+        action.connect('activate', self.on_selected_episodes_lock)
+        g.add_action(action)
+
+        # ---------------------------------
+        # Menubar -> View (General Options)
+        # ---------------------------------
         action = Gio.SimpleAction.new_stateful(
             'showToolbar', None, GLib.Variant.new_boolean(self.config.ui.gtk.toolbar))
         action.connect('activate', self.on_itemShowToolbar_activate)
@@ -414,8 +478,9 @@ class gPodder(BuilderWidget):
         action.connect('activate', self.on_item_view_search_always_visible_toggled)
         g.add_action(action)
 
-        # View Podcast List
-
+        # ---------------------------------
+        # Menubar -> View (Podcast Options)
+        # ---------------------------------
         action = Gio.SimpleAction.new_stateful(
             'viewHideBoringPodcasts', None, GLib.Variant.new_boolean(self.config.ui.gtk.podcast_list.hide_empty))
         action.connect('activate', self.on_item_view_hide_boring_podcasts_toggled)
@@ -431,30 +496,9 @@ class gPodder(BuilderWidget):
         action.connect('activate', self.on_item_view_show_podcast_sections_toggled)
         g.add_action(action)
 
-        action = Gio.SimpleAction.new_stateful(
-            'episodeNew', None, GLib.Variant.new_boolean(False))
-        action.connect('activate', self.on_episode_new_activate)
-        g.add_action(action)
-
-        action = Gio.SimpleAction.new_stateful(
-            'episodeLock', None, GLib.Variant.new_boolean(False))
-        action.connect('activate', self.on_episode_lock_activate)
-        g.add_action(action)
-
-        #RobL--v
-        action = Gio.SimpleAction.new_stateful(
-            'markEpisodesOldNewSelectedPodcast', None, GLib.Variant.new_boolean(False))
-        action.connect('activate', self.on_mark_episodes_as_old_new_selected_podcast)
-        g.add_action(action)
-        #RobL--^
-
-        action = Gio.SimpleAction.new_stateful(
-            'archiveEpisodesSelectedPodcast', None, GLib.Variant.new_boolean(False))  #RobL - formerly channelAutoArchive
-        action.connect('activate', self.on_channel_toggle_lock_activate)
-        g.add_action(action)
-
-        # View Episode List
-
+        # -----------------------------------------
+        # Menubar -> View (Episode Display Options)
+        # -----------------------------------------
         value = EpisodeListModel.VIEWS[
             self.config.ui.gtk.episode_list.view_mode or EpisodeListModel.VIEW_ALL]
         action = Gio.SimpleAction.new_stateful(
@@ -463,6 +507,9 @@ class gPodder(BuilderWidget):
         action.connect('activate', self.on_item_view_episodes_changed)
         g.add_action(action)
 
+        # -----------------------------------------
+        # Menubar -> View (General Display Options)
+        # -----------------------------------------
         action = Gio.SimpleAction.new_stateful(
             'viewAlwaysShowNewEpisodes', None, GLib.Variant.new_boolean(self.config.ui.gtk.episode_list.always_show_new))
         action.connect('activate', self.on_item_view_always_show_new_episodes_toggled)
@@ -494,15 +541,15 @@ class gPodder(BuilderWidget):
         action.connect('activate', self.on_item_view_ctrl_click_to_sort_episodes_toggled)
         g.add_action(action)
 
-        # Other Menus
-
+        # ----------------------------------------------------------------------
+        # Standard Menu Options (menubar & right-click options)
+        # ----------------------------------------------------------------------
         action_defs = [
             # Assign gPodder actions (Note: not how they appear in the UI,
             # but grouped by functionality here for clarity)
-            # --------------------------------------------------
-            # Podcasts - actions for managing EXISTING podacasts
-            # --------------------------------------------------
-            # Actions applied to the SELECTED PODCAST.
+            # -----------------------------------------------------------
+            # Menubar -> Podcast (actions for managing SELECTED podacast)
+            # -----------------------------------------------------------
             ('showPodcastDetails', self.on_show_podcast_details),                                       #RobL
             ('updateSelectedPodcast', self.on_update_selected_podcast),                                 #RobL
             ('findEpisodeSelectedPodcast', self.on_find_episode_selected_podcast),                      #RobL
@@ -510,17 +557,18 @@ class gPodder(BuilderWidget):
             # 'Add new podcast manually' - defined in manual_entry_controller below                     #RobL
             # 'Add new episode manually' - defined in manual_entry_controller below                     #RobL
             # 'Add multiple episodes manually' - defined in manual_entry_controller below               #RobL
-            # markEpisodesOldNewSelectedPodcast - defined above                                         #RobL
-            # archiveAllEpisodesSelectedPodcast - defined above                                         #RobL
+            # 'allEpisodesNewSelectedPodcast' - defined above                                           #RobL
+            # 'allEpisodesLockSelectedPodcast' - defined above                                          #RobL
+            # 'autoLockNewEpisodesSelectedPodcast' - defined above                                      #RobL
             ('undeleteEpisodesSelectedPodcast', self.on_undelete_episodes_selected_podcast),            #RobL
             ('removeSelectedPodcast', self.on_remove_selected_podcast),                                 #RobL
             ('removeDeletedEpisodesSelectedPodcast', self.on_remove_deleted_episodes_selected_podcast), #RobL
             ('deleteExpiredEpisodesSelectedPodcast', self.on_delete_expired_episodes_selected_podcast), #RobL
             ('openPodcastDownloadFolder', self.on_open_podcast_download_folder),                        #RobL            
-            ('refreshImage', self.on_itemRefreshCover_activate),                                        #RobL - right click option
-            # ------------------------------------------------------
-            # All Podcasts - actions for managing EXISTING podacasts
-            # ------------------------------------------------------
+            ('refreshPodcastImage', self.on_refresh_podcast_image),                                     #RobL - Formerly on_itemRefreshCover_activate
+            # -----------------------------------------------------------------
+            # Menubar -> All Podcasts (actions for managing EXISTING podacasts)
+            # -----------------------------------------------------------------
             ('checkForNewEpisodesAllPodcasts', self.on_check_for_new_episodes_all_podcasts),            #RobL
             ('downloadNewEpisodesAllPodcasts', self.on_download_new_episodes_all_podcasts),             #RobL
             ('updateAllPodcasts', self.on_update_all_podcasts),                                         #RobL
@@ -528,9 +576,9 @@ class gPodder(BuilderWidget):
             ('deleteOldEpisodesAllPodcasts', self.on_delete_old_episodes_all_podcasts),                 #RobL
             ('deleteMultiplePodcasts', self.on_delete_multiple_podcasts),                               #RobL
             ('findPodcast', self.on_find_podcast),                                                      #RobL
-            # -------------------------------------------------
-            # Episodes - actions for managing EXISTING episodes
-            # -------------------------------------------------
+            # ------------------------------------------------------------
+            # Menubar -> Episodes (actions for managing EXISTING episodes)
+            # ------------------------------------------------------------
             ('play', self.on_playback_selected_episodes),
             ('open', self.on_playback_selected_episodes),
             ('forceDownload', self.on_force_download_selected_episodes),
@@ -541,32 +589,34 @@ class gPodder(BuilderWidget):
             ('moveDown', self.on_move_selected_items_down),
             ('remove', self.on_remove_from_download_list),
             ('delete', self.on_delete_activate),
-            ('toggleEpisodeNew', self.on_item_toggle_played_activate),
-            ('toggleEpisodeLock', self.on_item_toggle_lock_activate),
+            #'episodeNew' - defined above                                                               #RobL
+            #'episodeLock' - defined above                                                              #RobL
             ('openEpisodeDownloadFolder', self.on_open_episode_download_folder),
-            ('selectChannel', self.on_select_channel_of_episode),
+            ('selectPodcastOfEpisode', self.on_select_podcast_of_episode),                              # Formerly 'selectChannel' / select_channel_of_episode_action 
             ('toggleShownotes', self.on_shownotes_selected_episodes),
             ('saveEpisodes', self.on_save_episodes_activate),
             ('bluetoothEpisodes', self.on_bluetooth_episodes_activate),
-            # ------------------------------------------------
-            # Subscriptions - actions for adding NEW podacasts
-            # ------------------------------------------------
+            # -----------------------------------------------------------
+            # Menubar -> Subscriptions (actions for adding NEW podacasts)
+            # -----------------------------------------------------------
             ('discover', self.on_itemImportChannels_activate),
             ('addChannel', self.on_itemAddChannel_activate),
             ('importFromFile', self.on_item_import_from_file_activate),
             ('exportChannels', self.on_itemExportChannels_activate),
-            # ------
-            # Extras
-            # ------
+            # -----------------
+            # Menubar -> Extras
+            # -----------------
             ('sync', self.on_sync_to_device_activate),
+            ('databaseIntegrityCheck', self.on_database_integrity_check),  #RobL
         ]
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
 
         for name, callback in action_defs:
             action = Gio.SimpleAction.new(name, None)
             action.connect('activate', callback)
             g.add_action(action)
 
-        #RobL--v
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
         # Add actions to support manual entry of podcasts and episodes.
         # This is done using the manual-entry controller (defined in manual_entry.py),
         # which is separate from the create_actions activities performed above.
@@ -579,18 +629,46 @@ class gPodder(BuilderWidget):
             self.manual_entry_controller.install_actions(g)
         else:
             logger.warning('manual_entry_controller not available, skipping installation of its actions')
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
 
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+        # This section defines references to menu items that need to be updated
+        # based on whether the menu item (aka action) can be taken based on the
+        # state of the system. For example, if no podcast is selected, certain
+        # menu item actions are available and others are not. The legacy suffix
+        # for menu item actions is _action, but the updated suffix is _menuitem
+        # for clarity.
         #--------------
         # All Podcasts
         #--------------
-        self.update_all_feeds_action = g.lookup_action('checkForNewEpisodesAllPodcasts')  #RobL - Formerly 'update'
-        self.update_channel_action = g.lookup_action('updateAllPodcasts')                 #RobL - Formerly 'updateChannel'
+        self.update_all_feeds_menuitem = g.lookup_action('checkForNewEpisodesAllPodcasts')  # Formerly 'update'
+        self.update_all_podcasts_menuitem = g.lookup_action('updateAllPodcasts')            # Formerly 'updateChannel' / update_channel_action
         #---------
         # Podcast
         #---------
-        self.edit_channel_action = g.lookup_action('showPodcastDetails')  #RobL - Formerly 'editChannel'
-        self.mark_episodes_old_new_action = g.lookup_action('markEpisodesOldNewSelectedPodcast')  #RobL
+        self.show_podcast_details_menuitem = g.lookup_action('showPodcastDetails')          # Formerly 'editChannel' / edit_channel_action
+        self.update_selected_podcast_menuitem = g.lookup_action('updateSelectedPodcast')
+        self.find_episode_selected_podcast_menuitem = g.lookup_action('findEpisodeSelectedPodcast')
+
+        # Note: Actions defined in defined in manual_entry_controller below.
+        self.manual_edit_podcast_menuitem = g.lookup_action('manualEditPodcast')
+        self.manual_add_podcast_menuitem = g.lookup_action('manualAddPodcast')
+        self.manual_add_episode_selected_podcast_menuitem = g.lookup_action('manualAddEpisodeSelectedPodcast')
+        self.manual_add_episode_batch_selected_podcast_menuitem = g.lookup_action('manualAddEpisodeBatchSelectedPodcast')
+
+        self.all_episodes_new_selected_podcast_menuitem = g.lookup_action('allEpisodesNewSelectedPodcast')  # Formerly mark_episodes_old_new_menuitem
+        self.all_episodes_lock_selected_podcast_menuitem = g.lookup_action('allEpisodesLockSelectedPodcast')
+        #self.auto_archive_action = g.lookup_action('allEpisodesLockSelectedPodcast')                                   # Formerly auto_archive_action
+        self.auto_lock_new_episodes_selected_podcast_menuitem = g.lookup_action('autoLockNewEpisodesSelectedPodcast')   # Formerly auto_archive_action
+        self.undelete_episodes_selected_podcast_menuitem = g.lookup_action('undeleteEpisodesSelectedPodcast')
+
+        self.remove_selected_podcast_menuitem = g.lookup_action('removeSelectedPodcast')
+        self.remove_deleted_episodes_selected_podcast_menuitem = g.lookup_action('removeDeletedEpisodesSelectedPodcast')
+        self.delete_expired_episodes_selected_podcast_menuitem = g.lookup_action('deleteExpiredEpisodesSelectedPodcast')
+
+        self.open_podcast_download_folder_menuitem = g.lookup_action('openPodcastDownloadFolder')
+        self.refresh_podcast_image_menuitem = g.lookup_action('refreshPodcastImage')
+
         #---------
         # Episode
         #---------
@@ -602,16 +680,19 @@ class gPodder(BuilderWidget):
         self.cancel_action = g.lookup_action('cancel')
         self.remove_action = g.lookup_action('remove')
         self.delete_action = g.lookup_action('delete')
-        self.toggle_episode_new_action = g.lookup_action('toggleEpisodeNew')
-        self.toggle_episode_lock_action = g.lookup_action('toggleEpisodeLock')
-        self.open_episode_download_folder_action = g.lookup_action('openEpisodeDownloadFolder')
-        self.select_channel_of_episode_action = g.lookup_action('selectChannel')
-        self.auto_archive_action = g.lookup_action('archiveEpisodesSelectedPodcast')
+
+        self.episode_new_menuitem = g.lookup_action('episodeNew')    # Formerly episode_new_action
+        self.episode_lock_menuitem = g.lookup_action('episodeLock')  # Formerly episode_lock_action
+
+        self.open_episode_download_folder_menuitem = g.lookup_action('openEpisodeDownloadFolder')   # Formerly open_episode_download_folder_action
+        self.select_podcast_of_episode_menuitem = g.lookup_action('selectPodcastOfEpisode')         # Formerly 'selectChannel' / select_channel_of_episode_action
+
         self.bluetooth_episodes_action = g.lookup_action('bluetoothEpisodes')
-        self.episode_new_action = g.lookup_action('episodeNew')
-        self.episode_lock_action = g.lookup_action('episodeLock')
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
 
         self.bluetooth_episodes_action.set_enabled(self.bluetooth_available)
+
+        self.set_podcast_menu_item_actions()  #RobL
 
     def on_resume_all_infobar_response(self, infobar, response_id):
         if response_id == Gtk.ResponseType.OK:
@@ -2209,98 +2290,6 @@ class gPodder(BuilderWidget):
             self.downloads_popover.show()
             return True
 
-    #RobL--v
-    # Mark all episodes as old/new for the selected podcast.
-    # Checked menu item = mark all episodes new.
-    # Unchecked menu item = mark all episodes old.
-    def on_mark_episodes_as_old_new_selected_podcast(self, action, param):
-        """Set all non-deleted episodes as old or new for the selected podcast."""
-
-        if self.active_channel is None:
-            title = _('No podcast selected')
-            message = _('Please select a podcast in the podcast list to update.')
-            self.show_message(message, title, widget=self.treeChannels)
-            return
-
-        # Determines whether to mark episodes as new or old based on the current
-        # state of the menu item.
-        # Note: The initial state of the menu item is "unchecked" (mark as old),
-        # so if the user clicks it, we want to mark episodes as new, and if they
-        # click it again, we want to mark episodes as old.
-        mark_as_new = not action.get_state().get_boolean()
-        title = (
-            _('Mark all episodes as new in selected podcast')
-            if mark_as_new
-            else _('Mark all episodes as old in selected podcast')
-        )
-        message = (
-            _('Are you sure you want to mark all episodes in the %s podcast as new?')
-            if mark_as_new
-            else _('Are you sure you want to mark all episodes in the %s podcast as old?')
-        ) % self.active_channel.title
-
-        # Prompts user to verify they want to mark all episodes as new or old.
-        if not self.show_confirmation(message, title):
-            return False
-
-        # Get all non-deleted episodes for the selected podcast.
-        episodes = [
-            episode for episode in self.active_channel.get_all_episodes()
-            if episode.state != gpodder.STATE_DELETED
-        ]
-
-        self.set_app_status(
-            _('Marking all episodes new') if mark_as_new
-            else _('Marking all episodes old')
-        )
-
-        # Create a function that can be run in the background to mark episodes.
-        @util.run_in_background
-        def mark_episodes_proc():
-            for episode in episodes:
-                if mark_as_new:
-                    # Mark the episode as new and update the database accordingly.
-                    # Note: This also undeletes deleted episodes but deleted episodes
-                    # were filtered out so this should only affect non-deleted episodes.
-                    episode.mark_new()
-
-                    # Force filename regeneration so the file is renamed to match
-                    # the <podcast title>-Sxx-Eyy-<episode title> naming scheme.
-                    if mark_as_new and episode.was_downloaded(and_exists=True):
-                        episode.local_filename(create=True, force_update=True)
-                else:
-                    # Mark the episode as old and update the database accordingly.
-                    episode.mark_old()
-
-            def finish_mark_episodes_proc():
-                self.update_podcast_list_model(selected=True)
-                self.update_episode_list_model()
-                self.update_mark_episodes_old_new_action_state()
-                self.clear_app_status()
-                self.channels_popover.popdown()
-                return False
-
-            util.idle_add(finish_mark_episodes_proc)
-    #RobL--^
-
-    #RobL--v
-    def update_mark_episodes_old_new_action_state(self):
-        """Update the selected podcast's old/new checkbox state."""
-
-        if self.active_channel is None or isinstance(self.active_channel, PodcastChannelProxy):
-            self.mark_episodes_old_new_action.change_state(GLib.Variant.new_boolean(False))
-            self.mark_episodes_old_new_action.set_enabled(False)
-            return False
-
-        episodes = self.active_channel.get_all_episodes()
-        all_episodes_are_new = bool(episodes) and all(episode.is_new for episode in episodes)
-
-        self.mark_episodes_old_new_action.change_state(
-            GLib.Variant.new_boolean(all_episodes_are_new))
-        self.mark_episodes_old_new_action.set_enabled(True)
-
-        return False
-    #RobL--^
 
     #RobL--v
     # Remove deleted episodes from the selected podcast instead of displaying them as deleted.
@@ -2473,7 +2462,7 @@ class gPodder(BuilderWidget):
         except GLib.GError:
             util.gui_open(episodes[0].parent.save_dir, gui=self)
 
-    def on_select_channel_of_episode(self, action, param):
+    def on_select_podcast_of_episode(self, action, param):  # RobL - formerly on_select_channel_of_episode
         episodes = self.get_selected_episodes()
         assert len(episodes) == 1
         channel = episodes[0].parent
@@ -2497,18 +2486,7 @@ class gPodder(BuilderWidget):
 
         if event is None or event.button == 3:
 
-            #RobL--v
-            # If all episodes are new, then the menu item should say
-            # "Mark all episodes as old" and be unchecked.
-            episodes = self.active_channel.get_all_episodes()
-            all_episodes_are_new = bool(episodes) and all(episode.is_new for episode in episodes)
-
-            self.mark_episodes_old_new_action.change_state(
-                GLib.Variant.new_boolean(all_episodes_are_new))
-            #RobL--v
-
-            self.auto_archive_action.change_state(
-                GLib.Variant.new_boolean(self.active_channel.auto_archive_episodes))
+            self.set_podcast_menu_item_actions()  #RobL
 
             self.channel_context_menu_helper.replace_entries([
                 (label,
@@ -2708,8 +2686,8 @@ class gPodder(BuilderWidget):
                 self.sendto_menu.remove_all()
 
             # New and Archive state
-            self.episode_new_action.change_state(GLib.Variant.new_boolean(any_new))
-            self.episode_lock_action.change_state(GLib.Variant.new_boolean(any_locked))
+            self.episode_new_menuitem.change_state(GLib.Variant.new_boolean(any_new))
+            self.episode_lock_menuitem.change_state(GLib.Variant.new_boolean(any_locked))
 
             self.allow_tooltips(False)
 
@@ -2717,6 +2695,61 @@ class gPodder(BuilderWidget):
             self.episodes_popover.set_pointing_to(area)
             self.episodes_popover.show()
             return True
+
+    #RobL--v
+    def set_podcast_menu_item_actions(self):
+
+        # If a real podcast is not selected, disable all menu item actions.
+        if self.active_channel and not isinstance(self.active_channel, PodcastChannelProxy):
+            state = True
+            #logger.warning('Actions enabled -- Channel is %s', self.active_channel.title)
+        else:
+            state = False
+            #logger.warning('Actions disabled -- No podcast selected')
+
+        self.show_podcast_details_menuitem.set_enabled(state)
+        self.update_selected_podcast_menuitem.set_enabled(state)
+        self.manual_edit_podcast_menuitem.set_enabled(state)
+        self.manual_add_podcast_menuitem.set_enabled(state)
+        self.manual_add_episode_selected_podcast_menuitem.set_enabled(state)
+        self.manual_add_episode_batch_selected_podcast_menuitem.set_enabled(state)
+        self.all_episodes_new_selected_podcast_menuitem.set_enabled(state)
+        self.all_episodes_lock_selected_podcast_menuitem.set_enabled(state)
+        self.auto_lock_new_episodes_selected_podcast_menuitem.set_enabled(state)
+        self.undelete_episodes_selected_podcast_menuitem.set_enabled(state)
+        self.remove_selected_podcast_menuitem.set_enabled(state)
+        self.remove_deleted_episodes_selected_podcast_menuitem.set_enabled(state)
+        self.delete_expired_episodes_selected_podcast_menuitem.set_enabled(state)
+        self.open_podcast_download_folder_menuitem.set_enabled(state)
+        self.refresh_podcast_image_menuitem.set_enabled(state)
+
+        # If no real podcast is selected, return before updating the remaining
+        # menu items.
+        if state==False:
+            return
+
+        # Set checkbox for auto-lock new episodes.
+        self.auto_lock_new_episodes_selected_podcast_menuitem.change_state(
+            GLib.Variant.new_boolean(self.active_channel.auto_archive_episodes))
+        #logger.warning(
+        #    'auto_lock_new_episodes_selected_podcast_menuitem=%s' %
+        #   self.active_channel.auto_archive_episodes
+        #)
+
+        episodes = self.active_channel.get_all_episodes()
+
+        # Set checkbox for all episodes are new.
+        all_episodes_are_new = bool(episodes) and all(episode.is_new for episode in episodes)
+        #logger.warning('all_episodes_are_new=%s' % all_episodes_are_new)
+        self.all_episodes_new_selected_podcast_menuitem.change_state(
+            GLib.Variant.new_boolean(all_episodes_are_new))
+
+        # Set checkbox for all episodes locked.
+        all_episodes_are_locked = bool(episodes) and all(episode.archive for episode in episodes)
+        #logger.warning('all_episodes_are_locked=%s' % all_episodes_are_locked)
+        self.all_episodes_lock_selected_podcast_menuitem.change_state(
+            GLib.Variant.new_boolean(all_episodes_are_locked))
+    #RobL--v
 
     def set_episode_actions(self, open_instead_of_play=False, can_play=False, can_force=False, can_download=False,
                             can_pause=False, can_cancel=False, can_delete=False, can_lock=False, is_episode_selected=False):
@@ -2751,18 +2784,20 @@ class gPodder(BuilderWidget):
         # Episodes menu
         self.play_action.set_enabled(can_play and not open_instead_of_play)
         self.open_action.set_enabled(can_play and open_instead_of_play)
+        #self.force_download_action.set_enabled(state)  #RobL
         self.download_action.set_enabled(can_force or can_download)
         self.pause_action.set_enabled(can_pause)
         self.cancel_action.set_enabled(can_cancel)
+        #self.remove_action.set_enabled(state)  #RobL
         self.delete_action.set_enabled(can_delete)
-        self.toggle_episode_new_action.set_enabled(is_episode_selected)
-        self.toggle_episode_lock_action.set_enabled(can_lock)
-        self.open_episode_download_folder_action.set_enabled(len(episodes) == 1)
-        self.select_channel_of_episode_action.set_enabled(len(episodes) == 1)
+        #self.toggle_episode_new_action.set_enabled(is_episode_selected)  #RobL - replaced by episode_new_menuitem (see context menu below)
+        #self.toggle_episode_lock_action.set_enabled(can_lock)  #RobL - replaced by episode_lock_menuitem (see context menu below)
+        self.open_episode_download_folder_menuitem.set_enabled(len(episodes) == 1)
+        self.select_podcast_of_episode_menuitem.set_enabled(len(episodes) == 1)
 
         # Episodes context menu
-        self.episode_new_action.set_enabled(is_episode_selected)
-        self.episode_lock_action.set_enabled(can_lock)
+        self.episode_new_menuitem.set_enabled(is_episode_selected)
+        self.episode_lock_menuitem.set_enabled(can_lock)
 
     def set_title(self, new_title):
         self.default_title = new_title
@@ -2904,6 +2939,7 @@ class gPodder(BuilderWidget):
 
             self.set_episode_actions(open_instead_of_play, can_play, False, can_download, can_pause, can_cancel, can_delete, can_lock,
                                     selection.count_selected_rows() > 0)
+            self.set_podcast_menu_item_actions()  #RobL
 
             return (open_instead_of_play, can_play, can_preview, can_download,
                     can_pause, can_cancel, can_delete, can_lock)
@@ -2938,6 +2974,7 @@ class gPodder(BuilderWidget):
                 can_force = False
 
             self.set_episode_actions(False, False, can_force, can_queue, can_pause, can_cancel, can_remove, False, False)
+            self.set_podcast_menu_item_actions()  #RobL
 
             return (False, False, False, can_queue, can_pause, can_cancel,
                     can_remove, False)
@@ -3339,8 +3376,9 @@ class gPodder(BuilderWidget):
         self.hboxUpdateFeeds.hide()
         if not self.application.want_headerbar:
             self.btnUpdateFeeds.show()
-        self.update_all_feeds_action.set_enabled(True)  #RobL
-        self.update_channel_action.set_enabled(True)
+
+        self.update_all_feeds_menuitem.set_enabled(True)     #RobL
+        self.update_all_podcasts_menuitem.set_enabled(True)  #RobL
 
     def on_btnCancelFeedUpdate_clicked(self, widget):
         if not self.feed_cache_update_cancelled:
@@ -3393,8 +3431,8 @@ class gPodder(BuilderWidget):
         # Fix URLs if mygpo has rewritten them
         self.rewrite_urls_mygpo()
 
-        self.update_all_feeds_action.set_enabled(False)  #RobL
-        self.update_channel_action.set_enabled(False)
+        self.update_all_feeds_menuitem.set_enabled(False)     #RobL
+        self.update_all_podcasts_menuitem.set_enabled(False)  #RobL
 
         self.feed_cache_update_cancelled = False
         self.btnCancelFeedUpdate.show()
@@ -3743,56 +3781,224 @@ class gPodder(BuilderWidget):
 
         self.play_or_download()
 
-    def mark_selected_episodes_new(self):
-        for episode in self.get_selected_episodes():
-            episode.mark(is_played=False)
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+    # Restructured this section for consistency in how new/old status and
+    # locked/unlocked status is managed. All functions related to setting
+    # new/old status and locked/unlocked status have been moved to his section
+    # for easier maintenance.
+
+    #==================== New/Old Episodes -- Begin ====================
+    def on_selected_episodes_new(self, action, *params):
+        """Marks selected episodes as new or old based on the state of the menu item action."""
+
+        if self.get_selected_episodes() is None:
+            title = _('No episode(s) selected')
+            message = _('Please select one or more episodes to update.')
+            self.show_message(message, title, widget=self.treeChannels)
+            return False
+
+        new_state = not action.get_state().get_boolean()
+        #logger.warning(
+        #    'on_selected_episodes_new: Prior State: New=%s -- New State: New=%s',
+        #    action.get_state().get_boolean(), new_state
+        #)
+
+        if new_state:
+            for episode in self.get_selected_episodes():
+                episode.mark(is_played=False)  # New
+        else:
+            for episode in self.get_selected_episodes():
+                episode.mark(is_played=True)  # Old
+
         self.on_selected_episodes_status_changed()
 
-    def mark_selected_episodes_old(self):
-        for episode in self.get_selected_episodes():
-            episode.mark(is_played=True)
-        self.on_selected_episodes_status_changed()
-
-    def on_item_toggle_played_activate(self, action, param):
-        for episode in self.get_selected_episodes():
-            episode.mark(is_played=episode.is_new and episode.state != gpodder.STATE_DELETED)
-        self.on_selected_episodes_status_changed()
-
-    def on_item_toggle_lock_activate(self, unused, toggle=True, new_value=False):
-        for episode in self.get_selected_episodes():
-            if episode.state == gpodder.STATE_DELETED:
-                # Always unlock deleted episodes
-                episode.mark(is_locked=False)
-            elif toggle or toggle is None:
-                # Gio.SimpleAction activate signal passes None (see #681)
-                episode.mark(is_locked=not episode.archive)
-            else:
-                episode.mark(is_locked=new_value)
-        self.on_selected_episodes_status_changed()
-        self.play_or_download()
-
-    def on_episode_lock_activate(self, action, *params):
-        new_value = not action.get_state().get_boolean()
-        self.on_item_toggle_lock_activate(None, toggle=False, new_value=new_value)
-        action.change_state(GLib.Variant.new_boolean(new_value))
+        action.change_state(GLib.Variant.new_boolean(new_state))
         self.episodes_popover.popdown()
         return True
 
-    def on_channel_toggle_lock_activate(self, action, *params):
-        if self.active_channel is None:
-            return
+    # Mark all episodes as new or old for the selected podcast based on the state
+    # of the menu item action value:
+    # Checked menu item = mark all episodes new
+    # Unchecked menu item = mark all episodes old
+    def on_all_episodes_new_selected_podcast(self, action, param):
+        """Set all non-deleted episodes as new or old for the selected podcast."""
+
+        if self.active_channel is None or isinstance(self.active_channel, PodcastChannelProxy):
+            title = _('No podcast selected')
+            message = _('Please select a podcast in the podcast list to update.')
+            self.show_message(message, title, widget=self.treeChannels)
+            return False
+
+        # Determines whether to mark episodes as new or old based on the current
+        # state of the menu item.
+        # Note: The initial state of the menu item is "unchecked" (mark as old),
+        # so if the user clicks it, we want to mark episodes as new, and if they
+        # click it again, we want to mark episodes as old.
+        new_state = not action.get_state().get_boolean()
+        mark_as_new = (
+            True if new_state
+            else False
+        )
+
+        # Determine if all episodes are new, old or a mix.
+        all_episodes = self.active_channel.get_all_episodes()
+        all_episodes_are_new = bool(all_episodes) and all(episode.is_new for episode in all_episodes)
+        all_episodes_are_old = bool(all_episodes) and all(not episode.is_new for episode in all_episodes)
+        mixed_episode_state = bool(all_episodes) and not all_episodes_are_new and not all_episodes_are_old
+
+        # Construct a user message.
+        if all_episodes_are_new:
+            message = (
+                _('All episodes in the %s podcast are marked: new\n\n'
+                'Are you sure you want to mark all episodes as new?')
+            ) % self.active_channel.title
+        elif all_episodes_are_old:
+            message = _(
+                _('All episodes in the %s podcast are marked: old\n\n'
+                'Are you sure you want to mark all episodes as new?')
+            ) % self.active_channel.title
+        else:
+            message = (
+                _('Episodes in the %s podcast are marked as mix of new and old.\n\n'
+                'Are you sure you want to mark all episodes as new?')
+            ) % self.active_channel.title
+
+        title = (
+            _('Mark all episodes as new in selected podcast')
+            if mark_as_new
+            else _('Mark all episodes as old in selected podcast')
+        )
+
+        # Prompts user to verify they want to mark all episodes as new or old.
+        if not self.show_confirmation(message, title):
+            return False
+
+        # Get all non-deleted episodes for the selected podcast.
+        undeleted_episodes = [
+            episode for episode in self.active_channel.get_all_episodes()
+            if episode.state != gpodder.STATE_DELETED
+        ]
+
+        # Mark the episodes as new or old.
+        for episode in undeleted_episodes:
+            if mark_as_new:
+                # Mark the episode as new and update the database accordingly.
+                # Note: This also undeletes deleted episodes but deleted episodes
+                # were filtered out so this should only affect non-deleted episodes.
+                episode.mark_new()
+
+                # Force filename regeneration so the file is renamed to match
+                # the <podcast title>-Sxx-Eyy-<episode title> naming scheme.
+                if mark_as_new and episode.was_downloaded(and_exists=True):
+                    episode.local_filename(create=True, force_update=True)
+            else:
+                # Mark the episode as old and update the database accordingly.
+                episode.mark_old()
+
+        self.update_podcast_list_model(selected=True)
+        self.update_episode_list_model()
+
+        action.change_state(GLib.Variant.new_boolean(new_state))
+        self.channels_popover.popdown()
+        return True
+
+    #==================== New/Old Episodes -- End ====================
+
+    #==================== Lock/Unlock Episodes -- Begin ====================
+    def on_selected_episodes_lock(self, action, *params):
+        """Determines the lock state of the selected episodes and toggles the
+           lock status to the alternate state."""
+
+        if self.get_selected_episodes() is None:
+            title = _('No episode(s) selected')
+            message = _('Please select one or more episodes to update.')
+            self.show_message(message, title, widget=self.treeChannels)
+            return False
+
+        new_state = not action.get_state().get_boolean()
+        #logger.warning(
+        #    _('on_selected_episodes_lock: Prior Lock State: %s --> New Lock State: %s'),
+        #    action.get_state().get_boolean(), new_state
+        #)
+
+        if new_state:
+            for episode in self.get_selected_episodes():
+                # Unlock all selected episodes except deleted ones.
+                if episode.state != gpodder.STATE_DELETED:
+                    episode.mark(is_locked=True)  # Locked
+        else:
+            for episode in self.get_selected_episodes():
+                episode.mark(is_locked=False)     # Unlocked
+
+        self.on_selected_episodes_status_changed()
+
+        # Update toolbar to show available actions after lock status has changed.
+        # Note: This does not play or download any episodes.
+        self.play_or_download()
+
+        action.change_state(GLib.Variant.new_boolean(new_state))
+        self.episodes_popover.popdown()
+        return True
+
+    def on_all_episodes_lock_selected_podcast(self, action, *params):  #RobL - formerly on_channel_toggle_lock_activate
+        """Determines the state of the auto-lock (aka auto-archive) flag for the
+           selected podcast and then locks or unlocks all episodes accordingly.
+           It then sets the auto-lock flag to the new state."""
+
+        if self.active_channel is None or isinstance(self.active_channel, PodcastChannelProxy):
+            title = _('No podcast selected')
+            message = _('Please select a podcast in the podcast list to update.')
+            self.show_message(message, title, widget=self.treeChannels)
+            return False
+
+        new_state = not action.get_state().get_boolean()
+        #logger.warning(
+        #    _('on_all_episodes_lock_selected_podcast: Prior Lock State: %s --> New Lock State: %s'),
+        #    action.get_state().get_boolean(), new_state
+        #)
+
+        for episode in self.active_channel.get_all_episodes():
+            episode.mark(is_locked=new_state)
+
+        self.update_podcast_list_model(selected=True)
+        self.update_episode_list_icons(update_all=True)
+        # Recalculate episode-related actions that can be taken after lock status has changed.
+        # Note: This does not play or download any episodes.
+        self.play_or_download()
+
+        action.change_state(GLib.Variant.new_boolean(new_state))
+        self.channels_popover.popdown()
+        return True
+
+    # Defines an action to toggle the auto-lock/auto-archive flag for the selected
+    # podcast without changing the lock state of the episodes.
+    def on_auto_lock_new_episodes_selected_podcast(self, action, *params):
+        """Changes the state of the auto-lock (aka auto-archive) flag for the
+           selected podcast."""
+
+        if self.active_channel is None or isinstance(self.active_channel, PodcastChannelProxy):
+            title = _('No podcast selected')
+            message = _('Please select a podcast in the podcast list to update.')
+            self.show_message(message, title, widget=self.treeChannels)
+            return False
+
+        new_state = not action.get_state().get_boolean()
+        #logger.warning(
+        #    _('on_auto_lock_new_episodes_selected_podcast: Prior Lock State: %s --> New Lock State: %s'),
+        #    action.get_state().get_boolean(), new_state
+        #)
 
         self.active_channel.auto_archive_episodes = not self.active_channel.auto_archive_episodes
         self.active_channel.save()
 
-        for episode in self.active_channel.get_all_episodes():
-            episode.mark(is_locked=self.active_channel.auto_archive_episodes)
-
-        self.update_podcast_list_model(selected=True)
-        self.update_episode_list_icons(update_all=True)
         action.change_state(
             GLib.Variant.new_boolean(self.active_channel.auto_archive_episodes))
         self.channels_popover.popdown()
+        return True
+
+    #==================== Lock/Unlock Episodes -- End ====================
+
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
 
     #RobL--v
     # Formerly on_itemUpdateChannelsAll_activate -- now on_update_all_podcasts
@@ -4276,7 +4482,7 @@ class gPodder(BuilderWidget):
             # The remaining stuff is to be done in the GTK main thread
             util.idle_add(finish_deletion, select_url)
 
-    def on_itemRefreshCover_activate(self, widget, *args):
+    def on_refresh_podcast_image(self, widget, *args):  #Robl - Formerly on_itemRefreshCover_activate
         assert self.active_channel is not None
 
         # RobL--v
@@ -4458,16 +4664,14 @@ class gPodder(BuilderWidget):
                 return
 
             # Dirty hack to check for "All episodes" or a section (see gpodder.gtkui.model)
-            if isinstance(self.active_channel, PodcastChannelProxy):
-                self.edit_channel_action.set_enabled(False)
-            else:
-                self.edit_channel_action.set_enabled(True)
+            #if isinstance(self.active_channel, PodcastChannelProxy):
+            #    self.set_podcast_menu_item_actions()  #RobL
         else:
             self.active_channel = None
-            self.edit_channel_action.set_enabled(False)
+
+        self.set_podcast_menu_item_actions()  #RobL
 
         self.update_episode_list_model()
-        self.update_mark_episodes_old_new_action_state()  #RobL
 
     def get_podcast_urls_from_selected_episodes(self):
         """Get a set of podcast URLs based on the selected episodes."""
@@ -4484,16 +4688,6 @@ class gPodder(BuilderWidget):
 
     def on_playback_selected_episodes(self, *params):
         self.playback_episodes(self.get_selected_episodes())
-
-    def on_episode_new_activate(self, action, *params):
-        state = not action.get_state().get_boolean()
-        if state:
-            self.mark_selected_episodes_new()
-        else:
-            self.mark_selected_episodes_old()
-        action.change_state(GLib.Variant.new_boolean(state))
-        self.episodes_popover.popdown()
-        return True
 
     def on_shownotes_selected_episodes(self, *params):
         episodes = self.get_selected_episodes()
@@ -4785,7 +4979,7 @@ class gPodder(BuilderWidget):
     def _on_playback_stopped(self, _start, _end, _total, episode):
         self.episode_list_status_changed([episode])
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
     # Routine to pause the startup indicator process for a short time
     # after each update to allow startup messages to be seen.
     def startup_pause(self, seconds):
@@ -4796,4 +4990,478 @@ class gPodder(BuilderWidget):
         time.sleep(seconds)
         while Gtk.events_pending():
             Gtk.main_iteration_do(False)
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+    # Database Integrity Check Feature
+    # --------------------------------
+    # This is a simple database integrity check feature that can be triggered
+    # via the "Extras" menu. It runs a few basic read-only checks on the database
+    # and reports any problems found.
+    # The feature performs the following checks:
+    # 1. SQLite PRAGMA integrity_check
+    # 2. Orphan episodes where episode.podcast_id has no matching podcast.id
+    # 3. Episodes with invalid podcast_id
+    # 4. Duplicate podcast URLs
+    # 5. Duplicate episode GUIDs within the same podcast
+    # 6. Duplicate episode download filenames within the same podcast
+    # 7. Podcasts with blank required fields
+    # 8. Episodes with blank required fields
+    # Note: It does not delete or repair any data in the database.
+
+    def on_database_integrity_check(self, action=None, param=None):
+        """Run basic read-only database integrity checks."""
+
+        self.set_app_status(_('Running database integrity check'))
+
+        try:
+            results = self._run_database_integrity_checks()
+        finally:
+            self.clear_app_status()
+
+        error_count = sum(1 for item in results if item['severity'] == 'ERROR')
+        warning_count = sum(1 for item in results if item['severity'] == 'WARNING')
+
+        if error_count or warning_count:
+            title = _('Database integrity check found issues')
+            message = _('%(errors)d error(s), %(warnings)d warning(s) found.') % {
+                'errors': error_count,
+                'warnings': warning_count,
+            }
+        else:
+            title = _('Database integrity check passed')
+            message = _('No database integrity problems were found.')
+
+        details = self._format_database_integrity_results(results)
+        self.show_message_details(title, message, details)
+        self.clear_app_status()
+
+        return False
+
+    def _run_database_integrity_checks(self):
+        """Run basic read-only SQLite/gPodder database integrity checks.
+
+        Returns a list of dictionaries:
+            {
+                'severity': 'OK' | 'WARNING' | 'ERROR',
+                'name': check name,
+                'message': human-readable result,
+                'details': optional list of detail strings
+            }
+        """
+
+        results = []
+
+        def add_result(severity, name, message, details=None):
+            results.append({
+                'severity': severity,
+                'name': name,
+                'message': message,
+                'details': details or [],
+            })
+
+        db = self.db.db
+
+        with self.db.lock:
+            cur = db.cursor()
+
+            # 1. SQLite low-level integrity check.
+            try:
+                cur.execute('PRAGMA integrity_check')
+                rows = [row[0] for row in cur.fetchall()]
+                problems = [row for row in rows if row.lower() != 'ok']
+
+                if problems:
+                    add_result(
+                        'ERROR',
+                        _('SQLite integrity check'),
+                        _('SQLite reported database integrity problems.'),
+                        problems
+                    )
+                else:
+                    add_result(
+                        'OK',
+                        _('SQLite integrity check'),
+                        _('SQLite reported OK.')
+                    )
+            except Exception as e:
+                add_result(
+                    'ERROR',
+                    _('SQLite integrity check'),
+                    _('Could not run SQLite integrity check: %s') % e
+                )
+
+            # 2. Episodes whose podcast_id does not point to an existing podcast.
+            try:
+                cur.execute("""
+                    SELECT e.id, e.podcast_id, e.title, e.url
+                    FROM episode e
+                    LEFT JOIN podcast p ON p.id = e.podcast_id
+                    WHERE p.id IS NULL
+                    ORDER BY e.podcast_id, e.id
+                """)
+                rows = cur.fetchall()
+
+                if rows:
+                    details = [
+                        'episode.id=%s, podcast_id=%s, title=%s, url=%s' %
+                        (episode_id, podcast_id, title, url)
+                        for episode_id, podcast_id, title, url in rows[:100]
+                    ]
+
+                    if len(rows) > 100:
+                        details.append(
+                            _('... %(count)d additional orphan episode(s) not shown') %
+                            {'count': len(rows) - 100}
+                        )
+
+                    add_result(
+                        'ERROR',
+                        _('Orphan episodes'),
+                        _('%(count)d episode(s) reference a missing podcast.') %
+                        {'count': len(rows)},
+                        details
+                    )
+                else:
+                    add_result(
+                        'OK',
+                        _('Orphan episodes'),
+                        _('No orphan episodes found.')
+                    )
+            except Exception as e:
+                add_result(
+                    'ERROR',
+                    _('Orphan episodes'),
+                    _('Could not check for orphan episodes: %s') % e
+                )
+
+            # 3. Episodes with invalid or suspicious podcast_id values.
+            try:
+                cur.execute("""
+                    SELECT id, podcast_id, title, url
+                    FROM episode
+                    WHERE podcast_id IS NULL OR podcast_id <= 0
+                    ORDER BY id
+                """)
+                rows = cur.fetchall()
+
+                if rows:
+                    details = [
+                        'episode.id=%s, podcast_id=%s, title=%s, url=%s' %
+                        (episode_id, podcast_id, title, url)
+                        for episode_id, podcast_id, title, url in rows[:100]
+                    ]
+
+                    if len(rows) > 100:
+                        details.append(
+                            _('... %(count)d additional invalid podcast_id episode(s) not shown') %
+                            {'count': len(rows) - 100}
+                        )
+
+                    add_result(
+                        'ERROR',
+                        _('Invalid episode podcast IDs'),
+                        _('%(count)d episode(s) have an invalid podcast_id.') %
+                        {'count': len(rows)},
+                        details
+                    )
+                else:
+                    add_result(
+                        'OK',
+                        _('Invalid episode podcast IDs'),
+                        _('No invalid episode podcast IDs found.')
+                    )
+            except Exception as e:
+                add_result(
+                    'ERROR',
+                    _('Invalid episode podcast IDs'),
+                    _('Could not check episode podcast IDs: %s') % e
+                )
+
+            # 4. Duplicate podcast URLs.
+            # The DB has a unique index, but this check confirms the logical condition.
+            try:
+                cur.execute("""
+                    SELECT url, COUNT(*)
+                    FROM podcast
+                    GROUP BY url
+                    HAVING COUNT(*) > 1
+                    ORDER BY COUNT(*) DESC, url
+                """)
+                rows = cur.fetchall()
+
+                if rows:
+                    details = [
+                        'url=%s, count=%s' % (url, count)
+                        for url, count in rows[:100]
+                    ]
+
+                    add_result(
+                        'ERROR',
+                        _('Duplicate podcast URLs'),
+                        _('%(count)d duplicate podcast URL group(s) found.') %
+                        {'count': len(rows)},
+                        details
+                    )
+                else:
+                    add_result(
+                        'OK',
+                        _('Duplicate podcast URLs'),
+                        _('No duplicate podcast URLs found.')
+                    )
+            except Exception as e:
+                add_result(
+                    'ERROR',
+                    _('Duplicate podcast URLs'),
+                    _('Could not check duplicate podcast URLs: %s') % e
+                )
+
+            # 5. Duplicate episode GUIDs inside the same podcast.
+            try:
+                cur.execute("""
+                    SELECT podcast_id, guid, COUNT(*)
+                    FROM episode
+                    GROUP BY podcast_id, guid
+                    HAVING COUNT(*) > 1
+                    ORDER BY podcast_id, COUNT(*) DESC
+                """)
+                rows = cur.fetchall()
+
+                if rows:
+                    details = [
+                        'podcast_id=%s, guid=%s, count=%s' %
+                        (podcast_id, guid, count)
+                        for podcast_id, guid, count in rows[:100]
+                    ]
+
+                    if len(rows) > 100:
+                        details.append(
+                            _('... %(count)d additional duplicate GUID group(s) not shown') %
+                            {'count': len(rows) - 100}
+                        )
+
+                    add_result(
+                        'ERROR',
+                        _('Duplicate episode GUIDs'),
+                        _('%(count)d duplicate episode GUID group(s) found.') %
+                        {'count': len(rows)},
+                        details
+                    )
+                else:
+                    add_result(
+                        'OK',
+                        _('Duplicate episode GUIDs'),
+                        _('No duplicate episode GUIDs found.')
+                    )
+            except Exception as e:
+                add_result(
+                    'ERROR',
+                    _('Duplicate episode GUIDs'),
+                    _('Could not check duplicate episode GUIDs: %s') % e
+                )
+
+            # 6. Duplicate episode download filenames inside the same podcast.
+            try:
+                cur.execute("""
+                    SELECT podcast_id, download_filename, COUNT(*)
+                    FROM episode
+                    WHERE download_filename IS NOT NULL
+                      AND download_filename <> ''
+                    GROUP BY podcast_id, download_filename
+                    HAVING COUNT(*) > 1
+                    ORDER BY podcast_id, COUNT(*) DESC
+                """)
+                rows = cur.fetchall()
+
+                if rows:
+                    details = [
+                        'podcast_id=%s, download_filename=%s, count=%s' %
+                        (podcast_id, download_filename, count)
+                        for podcast_id, download_filename, count in rows[:100]
+                    ]
+
+                    if len(rows) > 100:
+                        details.append(
+                            _('... %(count)d additional duplicate filename group(s) not shown') %
+                            {'count': len(rows) - 100}
+                        )
+
+                    add_result(
+                        'ERROR',
+                        _('Duplicate episode download filenames'),
+                        _('%(count)d duplicate episode download filename group(s) found.') %
+                        {'count': len(rows)},
+                        details
+                    )
+                else:
+                    add_result(
+                        'OK',
+                        _('Duplicate episode download filenames'),
+                        _('No duplicate episode download filenames found.')
+                    )
+            except Exception as e:
+                add_result(
+                    'ERROR',
+                    _('Duplicate episode download filenames'),
+                    _('Could not check duplicate episode download filenames: %s') % e
+                )
+
+            # 7. Podcasts with blank required values.
+            try:
+                cur.execute("""
+                    SELECT id, title, url, download_folder
+                    FROM podcast
+                    WHERE title = ''
+                       OR url = ''
+                       OR download_folder = ''
+                    ORDER BY id
+                """)
+                rows = cur.fetchall()
+
+                if rows:
+                    details = [
+                        'podcast.id=%s, title=%s, url=%s, download_folder=%s' %
+                        (podcast_id, title, url, download_folder)
+                        for podcast_id, title, url, download_folder in rows[:100]
+                    ]
+
+                    if len(rows) > 100:
+                        details.append(
+                            _('... %(count)d additional podcast(s) with blank required fields not shown') %
+                            {'count': len(rows) - 100}
+                        )
+
+                    add_result(
+                        'WARNING',
+                        _('Podcasts with blank required fields'),
+                        _('%(count)d podcast(s) have blank title, URL, or download folder.') %
+                        {'count': len(rows)},
+                        details
+                    )
+                else:
+                    add_result(
+                        'OK',
+                        _('Podcasts with blank required fields'),
+                        _('No podcasts with blank required fields found.')
+                    )
+            except Exception as e:
+                add_result(
+                    'ERROR',
+                    _('Podcasts with blank required fields'),
+                    _('Could not check podcasts with blank required fields: %s') % e
+                )
+
+            # 8. Episodes with blank required values.
+            try:
+                cur.execute("""
+                    SELECT id, podcast_id, title, url, guid
+                    FROM episode
+                    WHERE title = ''
+                       OR url = ''
+                       OR guid = ''
+                    ORDER BY id
+                """)
+                rows = cur.fetchall()
+
+                if rows:
+                    details = [
+                        'episode.id=%s, podcast_id=%s, title=%s, url=%s, guid=%s' %
+                        (episode_id, podcast_id, title, url, guid)
+                        for episode_id, podcast_id, title, url, guid in rows[:100]
+                    ]
+
+                    if len(rows) > 100:
+                        details.append(
+                            _('... %(count)d additional episode(s) with blank required fields not shown') %
+                            {'count': len(rows) - 100}
+                        )
+
+                    add_result(
+                        'WARNING',
+                        _('Episodes with blank required fields'),
+                        _('%(count)d episode(s) have blank title, URL, or GUID.') %
+                        {'count': len(rows)},
+                        details
+                    )
+                else:
+                    add_result(
+                        'OK',
+                        _('Episodes with blank required fields'),
+                        _('No episodes with blank required fields found.')
+                    )
+            except Exception as e:
+                add_result(
+                    'ERROR',
+                    _('Episodes with blank required fields'),
+                    _('Could not check episodes with blank required fields: %s') % e
+                )
+
+            # 9. Manual podcasts with episode counts.
+            try:
+                cur.execute("""
+                    SELECT p.id, p.url, p.title, p.section, COUNT(e.id) AS episode_count
+                    FROM podcast p
+                    LEFT JOIN episode e ON e.podcast_id = p.id
+                    WHERE p.url LIKE 'manual://%'
+                    GROUP BY p.id, p.url, p.title, p.section
+                    ORDER BY p.title, p.id
+                """)
+                rows = cur.fetchall()
+
+                if rows:
+                    details = [
+                        'podcast.id=%s, title=%s, section=%s, episodes=%s, url=%s' %
+                        (podcast_id, title, section, episode_count, url)
+                        for podcast_id, url, title, section, episode_count in rows[:100]
+                    ]
+
+                    if len(rows) > 100:
+                        details.append(
+                            _('... %(count)d additional manual podcast(s) not shown') %
+                            {'count': len(rows) - 100}
+                        )
+
+                    add_result(
+                        'OK',
+                        _('Manual podcasts'),
+                        _('%(count)d manual podcast(s) found.') %
+                        {'count': len(rows)},
+                        details
+                    )
+                else:
+                    add_result(
+                        'OK',
+                        _('Manual podcasts'),
+                        _('No manual podcasts found.')
+                    )
+            except Exception as e:
+                add_result(
+                    'ERROR',
+                    _('Manual podcasts'),
+                    _('Could not check manual podcasts: %s') % e
+                )
+
+            cur.close()
+
+        return results
+
+    def _format_database_integrity_results(self, results):
+        """Format database integrity results for show_message_details()."""
+
+        lines = []
+
+        for item in results:
+            severity = html.escape(item['severity'])
+            name = html.escape(str(item['name']))
+            message = html.escape(str(item['message']))
+
+            lines.append('<b>[%s] %s</b>' % (severity, name))
+            lines.append(message)
+
+            for detail in item.get('details', []):
+                lines.append('  - %s' % html.escape(str(detail)))
+
+            lines.append('')
+
+        return '\n'.join(lines)
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-

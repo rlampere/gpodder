@@ -123,7 +123,7 @@ class BuilderWidget(GtkBuilderWidget):
         tv.set_buffer(tb)
         tv.set_property('expand', True)
         sw = Gtk.ScrolledWindow()
-        sw.set_size_request(400, 200)
+        sw.set_size_request(700, 600)  #RobL
         sw.set_property('shadow-type', Gtk.ShadowType.IN)
         sw.add(tv)
         sw.show_all()

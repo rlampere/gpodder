@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
     <menu id="app-menu">
+        <!-- ======================================= -->
+        <!-- Menubar -> gPodder+ (application level) -->
+        <!-- ======================================== -->
         <section>
             <item>
                 <attribute name="action">app.preferences</attribute>
@@ -43,9 +46,9 @@
         </section>
     </menu>
     <menu id="menubar">
-        <!-- ================================== -->
-        <!-- Podcast - manages selected podcast -->
-        <!-- ================================== -->
+        <!-- ============================================= -->
+        <!-- Menubar -> Podcast (manages selected podcast) -->
+        <!-- ============================================= -->
         <submenu id="menuPodcast">
             <attribute name="label" translatable="yes">_Podcast</attribute>
             <section>
@@ -83,12 +86,16 @@
             </section>
             <section>
                 <item>
-                    <attribute name="action">win.markEpisodesOldNewSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">All Episodes New</attribute>
+                    <attribute name="action">win.allEpisodesNewSelectedPodcast</attribute>
+                    <attribute name="label" translatable="yes">All Episodes - New</attribute>
                 </item>
                 <item>
-                    <attribute name="action">win.archiveEpisodesSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Archive All Episodes</attribute>
+                    <attribute name="action">win.allEpisodesLockSelectedPodcast</attribute>
+                    <attribute name="label" translatable="yes">All Episodes - Lock</attribute>
+                </item>
+                <item>
+                    <attribute name="action">win.autoLockNewEpisodesSelectedPodcast</attribute>
+                    <attribute name="label" translatable="yes">Auto-Lock New Episodes</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.undeleteEpisodesSelectedPodcast</attribute>
@@ -98,31 +105,31 @@
             <section>
                 <item>
                     <attribute name="action">win.removeSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Delete Podcast</attribute>
+                    <attribute name="label" translatable="yes">Remove Podcast</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.removeDeletedEpisodesSelectedPodcast</attribute>
                     <attribute name="label" translatable="yes">Remove Deleted Episodes</attribute>
                 </item>
                 <item>
-                    <attribute name="action">win.deletedExpiredEpisodesSelectedPodcast</attribute>
-                    <attribute name="label" translatable="yes">Remove Expired Episodes</attribute>
+                    <attribute name="action">win.deleteExpiredEpisodesSelectedPodcast</attribute>
+                    <attribute name="label" translatable="yes">Delete Expired Episodes</attribute>
                 </item>
             </section>
             <section>
                 <item>
-                    <attribute name="action">win.openChannelDownloadFolder</attribute>
+                    <attribute name="action">win.openPodcastDownloadFolder</attribute>
                     <attribute name="label" translatable="yes">Open Download Folder</attribute>
                 </item>
                 <item>
-                    <attribute name="action">win.refreshImage</attribute>
+                    <attribute name="action">win.refreshPodcastImage</attribute>
                     <attribute name="label" translatable="yes">Refresh Podcast Image</attribute>
                 </item>
             </section>
         </submenu>
-        <!-- ========================================== -->
-        <!-- Episode - manages selected podcast episode -->
-        <!-- ========================================== -->
+        <!-- ===================================================== -->
+        <!-- Menubar -> Episode (manages selected podcast episode) -->
+        <!-- ===================================================== -->
         <submenu id="menuEpisodes">
             <attribute name="label" translatable="yes">_Episode</attribute>
             <section>
@@ -154,13 +161,12 @@
             </section>
             <section>
                 <item>
-                    <attribute name="action">win.toggleEpisodeNew</attribute>
-                    <attribute name="label" translatable="yes">Toggle Episode Status (new/old)</attribute>
-                    <attribute name="accel">&lt;Primary&gt;e</attribute>
+                    <attribute name="action">win.episodeNew</attribute>
+                    <attribute name="label" translatable="yes">New</attribute>
                 </item>
                 <item>
-                    <attribute name="action">win.toggleEpisodeLock</attribute>
-                    <attribute name="label" translatable="yes">Toggle Archive Flag (lock/unlock)</attribute>
+                    <attribute name="action">win.episodeLock</attribute>
+                    <attribute name="label" translatable="yes">Lock</attribute>
                 </item>
             </section>
             <section>
@@ -185,9 +191,9 @@
                 </item>
             </section>
         </submenu>
-        <!-- ================================== -->
-        <!-- All Podcasts - manages all podcast -->
-        <!-- ================================== -->
+        <!-- =============================================== -->
+        <!-- Menubar -> All Podcasts - (applies to podcasts) -->
+        <!-- =============================================== -->
         <submenu id="menuEpisodes">
             <attribute name="label" translatable="yes">_All Podcasts</attribute>
             <section>
@@ -229,9 +235,9 @@
                 </item>
             </section>
         </submenu>
-        <!-- ========================================================= -->
-        <!-- Subscriptions - adds new podcasts based on a subscription -->
-        <!-- ========================================================= -->
+        <!-- ==================================================================== -->
+        <!-- Menubar -> Subscriptions (adds new podcasts based on a subscription) -->
+        <!-- ==================================================================== -->
         <submenu id="menuSubscriptions">
             <attribute name="label" translatable="yes">_Subscriptions</attribute>
             <section>
@@ -257,14 +263,19 @@
             </section>
         </submenu>
         <submenu id="menuExtras">
-            <!-- ===================================================== -->
-            <!-- Extras - additional options not specific to a podcast -->
-            <!-- ===================================================== -->
+            <!-- ================================================================ -->
+            <!-- Menubar -> Extras (additional options not specific to a podcast) -->
+            <!-- ================================================================ -->
             <attribute name="label" translatable="yes">E_xtras</attribute>
             <item>
                 <attribute name="action">win.sync</attribute>
                 <attribute name="label" translatable="yes">Sync to Device...</attribute>
                 <attribute name="accel">&lt;Primary&gt;s</attribute>
+            </item>
+            <!-- Added database integrity check feature - RobL -->
+            <item>
+                <attribute name="action">win.databaseIntegrityCheck</attribute>
+                <attribute name="label" translatable="yes">Database Integrity Check...</attribute>
             </item>
         </submenu>
         <submenu id="menuView">
@@ -420,12 +431,12 @@
         </section>
         <section>
             <item>
-                <attribute name="action">win.markEpisodesOldNewSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">All Episodes New</attribute>
+                <attribute name="action">win.allEpisodesNewSelectedPodcast</attribute>
+                <attribute name="label" translatable="yes">All Episodes - New</attribute>
             </item>
             <item>
-                <attribute name="action">win.archiveEpisodesSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Archive All Episodes</attribute>
+                <attribute name="action">win.allEpisodesLockSelectedPodcast</attribute>
+                <attribute name="label" translatable="yes">All Episodes - Lock</attribute>
             </item>
             <item>
                 <attribute name="action">win.undeleteEpisodesSelectedPodcast</attribute>
@@ -436,17 +447,17 @@
                 <attribute name="label" translatable="yes">Remove Deleted Episodes</attribute>
             </item>
             <item>
-                <attribute name="action">win.deletedExpiredEpisodesSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Remove Expired Episodes</attribute>
+                <attribute name="action">win.deleteExpiredEpisodesSelectedPodcast</attribute>
+                <attribute name="label" translatable="yes">Delete Expired Episodes</attribute>
             </item>
         </section>
         <section>
             <item>
-                <attribute name="action">win.openChannelDownloadFolder</attribute>
+                <attribute name="action">win.openPodcastDownloadFolder</attribute>
                 <attribute name="label" translatable="yes">Open Download Folder</attribute>
             </item>
             <item>
-                <attribute name="action">win.refreshImage</attribute>
+                <attribute name="action">win.refreshPodcastImage</attribute>
                 <attribute name="label" translatable="yes">Refresh Podcast Image</attribute>
             </item>
         </section>
@@ -495,7 +506,7 @@
             </item>
             <item>
                 <attribute name="action">win.episodeLock</attribute>
-                <attribute name="label" translatable="yes">Archive</attribute>
+                <attribute name="label" translatable="yes">Lock</attribute>
             </item>
         </section>
         <section>
@@ -512,15 +523,15 @@
                 <attribute name="label" translatable="yes">Open Download Folder</attribute>
             </item>
             <item>
-                <attribute name="action">win.selectChannel</attribute>
+                <attribute name="action">win.selectPodcastOfEpisode</attribute>
                 <attribute name="label" translatable="yes">Highlight Associated Podcast</attribute>
             </item>
         </section>
     </menu>
     <menu id="episodes-context-sendto">
-        <!-- ======================================== -->
-        <!-- Episode -> Send To - Right Click Options -->
-        <!-- ======================================== -->
+        <!-- ==================================-->
+        <!-- Right Click -> Episode -> Send-To -->
+        <!-- ==================================-->
         <item>
             <attribute name="action">win.saveEpisodes</attribute>
             <attribute name="label" translatable="yes">Local Folder</attribute>
@@ -530,9 +541,9 @@
             <attribute name="label" translatable="yes">Bluetooth Device</attribute>
         </item>
     </menu>
-    <!-- =============================== -->
-    <!-- Downloads - Right Click Options -->
-    <!-- =============================== -->
+    <!-- ======================== -->
+    <!-- Right Click -> Downloads -->
+    <!-- ======================== -->
     <menu id="downloads-context">
         <section>
             <attribute name="display-hint">horizontal-buttons</attribute>
