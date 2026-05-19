@@ -36,9 +36,16 @@ import gpodder
 from gpodder import coverart, model, query, util
 from gpodder.gtkui import draw
 
+# Text string processor for internationalization/localization.
 _ = gpodder.gettext
 
+# Plural-aware text string processor (1 egg, 2 eggs)
+N_ = gpodder.ngettext
+
+# Set up module-level logger.
 logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
+
 
 #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
 # Definitions for color themes and styles used by the gPodder+ UI.
@@ -74,7 +81,14 @@ class GUITheme:
         'PODCAST_SELECT_FG': '#000000',     # Black
         'PODCAST_HOVER_BG': '#48C5E5',      # Bright Sky Blue / Vibrant Turquoise
         'PODCAST_HOVER_FG': '#000000',      # Black
-    }
+
+        'METADATA_HEADER_FG': '#000000',
+        'METADATA_CURRENT_BG': '#F5F5F5',
+        'METADATA_CURRENT_FG': '#000000',
+        'METADATA_ONLINE_BG': '#EAF4FF',
+        'METADATA_ONLINE_FG': '#000000',
+        'METADATA_BORDER': '#B8B8B8',
+}
 
     DARK_COLORS = {
         'APP_STATUS_BG': '#202124',         # Dark Charcoal / Google Gray
@@ -102,6 +116,13 @@ class GUITheme:
         'PODCAST_SELECT_FG': '#FFFFFF',     # White
         'PODCAST_HOVER_BG': '#406878',      # Muted Denim / Smokey Teal
         'PODCAST_HOVER_FG': '#FFFFFF',      # White
+
+        'METADATA_HEADER_FG': '#FFFFFF',
+        'METADATA_CURRENT_BG': '#2B2B2B',
+        'METADATA_CURRENT_FG': '#E8EAED',
+        'METADATA_ONLINE_BG': '#1F3A4A',
+        'METADATA_ONLINE_FG': '#FFFFFF',
+        'METADATA_BORDER': '#5F6368',
     }
 
     EPISODE_NEW_STYLE_BEG = '<b>'
@@ -168,6 +189,32 @@ class GUITheme:
             #episode-list.view:selected:focus:hover {{
                 background-color: {c['EPISODE_HOVER_BG']};
                 color: {c['EPISODE_HOVER_FG']};
+            }}
+            .metadata-apply-header {{
+                color: {c['METADATA_HEADER_FG']};
+                font-weight: bold;
+            }}
+            .metadata-current-value {{
+                background-color: {c['METADATA_CURRENT_BG']};
+                color: {c['METADATA_CURRENT_FG']};
+                border: 1px solid {c['METADATA_BORDER']};
+                padding: 6px;
+                border-radius: 4px;
+            }}
+            .metadata-current-value text {{
+                background-color: {c['METADATA_CURRENT_BG']};
+                color: {c['METADATA_CURRENT_FG']};
+            }}
+            .metadata-online-value {{
+                background-color: {c['METADATA_ONLINE_BG']};
+                color: {c['METADATA_ONLINE_FG']};
+                border: 1px solid {c['METADATA_BORDER']};
+                padding: 6px;
+                border-radius: 4px;
+            }}
+            .metadata-online-value text {{
+                background-color: {c['METADATA_ONLINE_BG']};
+                color: {c['METADATA_ONLINE_FG']};
             }}
         """
 #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-

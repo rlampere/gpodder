@@ -17,6 +17,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+import logging  #RobL
 import os
 
 from gi.repository import Gdk, Gio, Gtk
@@ -25,7 +26,15 @@ import gpodder
 from gpodder import util
 from gpodder.gtkui.base import GtkBuilderWidget
 
+# Text string processor for internationalization/localization.
 _ = gpodder.gettext
+
+# Plural-aware text string processor (1 egg, 2 eggs)
+N_ = gpodder.ngettext
+
+# Set up module-level logger.
+logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
 
 
 def show_message_dialog(parent, message, title=None):

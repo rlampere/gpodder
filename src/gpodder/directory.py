@@ -22,6 +22,7 @@
 # gpodder.directory - Podcast directory and search providers
 # Thomas Perl <thp@gpodder.org>; 2014-10-22
 #
+import logging  #RobL
 
 import urllib.error
 import urllib.parse
@@ -30,7 +31,15 @@ import urllib.request
 import gpodder
 from gpodder import opml, util, podcastmetadata
 
+# Text string processor for internationalization/localization.
 _ = gpodder.gettext
+
+# Plural-aware text string processor (1 egg, 2 eggs)
+N_ = gpodder.ngettext
+
+# Set up module-level logger.
+logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
 
 
 class JustAWarning(Exception):
@@ -242,7 +251,12 @@ class PodcastIndexSearchProvider(Provider):
         if not config.metadata.podcast_index.enabled:
             raise JustAWarning(_('Podcast Index search is disabled.'))
 
-        service = podcastmetadata.create_metadata_service(config)
+        service = podcastmetadata.create_metadata_service(self.config, include_rss=False)
+
+        logger.info(
+            'Manual metadata search providers: %s',
+            ', '.join(provider.name for provider in service.providers)
+        )
 
         # Use only the Podcast Index provider here; do not also call RSS.
         provider = podcastmetadata.PodcastIndexMetadataProvider(

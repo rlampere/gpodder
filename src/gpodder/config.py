@@ -32,7 +32,15 @@ import time
 import gpodder
 from gpodder import jsonconfig, util
 
+# Text string processor for internationalization/localization.
 _ = gpodder.gettext
+
+# Plural-aware text string processor (1 egg, 2 eggs)
+N_ = gpodder.ngettext
+
+# Set up module-level logger.
+logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
 
 defaults = {
     # External applications used for playback
@@ -244,6 +252,7 @@ defaults = {
         'proxy_username': '',
         'proxy_password': '',
     },
+
     #RobL--v
     # Added feature to obtain podcast metadata from online sources.
     'metadata': {
@@ -259,13 +268,16 @@ defaults = {
         'enrich_on_update': False,
     },
     #RobL--^
+
     'extensions': {
         'enabled': [],
     },
+
     'sendto': {
         'custom_file_format': '{episode.title}',
         'custom_file_format_enabled': False,
     },
+
     'path': {
         'alternate': '',
     },

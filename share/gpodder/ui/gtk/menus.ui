@@ -161,6 +161,10 @@
             </section>
             <section>
                 <item>
+                    <attribute name="action">win.manualEditEpisodeSelectedPodcast</attribute>
+                    <attribute name="label" translatable="yes">Edit Episode...</attribute>
+                </item>
+                <item>
                     <attribute name="action">win.episodeNew</attribute>
                     <attribute name="label" translatable="yes">New</attribute>
                 </item>
@@ -517,7 +521,7 @@
         <section>
             <item>
                 <attribute name="action">win.manualEditEpisodeSelectedPodcast</attribute>
-                <attribute name="label" translatable="yes">Edit Episode</attribute>
+                <attribute name="label" translatable="yes">Edit Episode...</attribute>
             </item>
             <item>
                 <attribute name="action">win.toggleShownotes</attribute>

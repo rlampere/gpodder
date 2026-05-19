@@ -66,11 +66,15 @@ import gi  # isort:skip
 gi.require_version('Gtk', '3.0')  # isort:skip
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # isort:skip
 
-
-logger = logging.getLogger(__name__)
-
+# Text string processor for internationalization/localization.
 _ = gpodder.gettext
+
+# Plural-aware text string processor (1 egg, 2 eggs)
 N_ = gpodder.ngettext
+
+# Set up module-level logger.
+logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
 
 
 class gPodder(BuilderWidget):
@@ -4526,23 +4530,20 @@ class gPodder(BuilderWidget):
         assert self.active_channel is not None
 
         # RobL--v
-        # If a local folder.jpg exists in the podcast download folder, use it.
-        # Do NOT call replace_cover(..., custom_url=False), because that path
-        # deletes the existing folder.jpg before attempting to reload/download art.
-        folder_jpg = self.active_channel.cover_file + '.jpg'
-
         self.active_channel.cover_thumb = None
         self.active_channel.save()
         self.podcast_list_model.clear_cover_cache(self.active_channel.url)
 
-        if os.path.exists(folder_jpg):
-            self.cover_downloader.request_cover(
+        if self.active_channel.cover_url:
+            self.cover_downloader.replace_cover(
                 self.active_channel,
-                custom_url=None,
-                avoid_downloading=True
+                custom_url=self.active_channel.cover_url
             )
         else:
-            self.cover_downloader.replace_cover(self.active_channel, custom_url=False)
+            self.cover_downloader.replace_cover(
+                self.active_channel,
+                custom_url=False
+            )
         # RobL--^
 
     # RobL--v

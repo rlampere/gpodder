@@ -22,8 +22,15 @@ import podcastparser
 import gpodder
 from gpodder import util
 
+# Text string processor for internationalization/localization.
 _ = gpodder.gettext
+
+# Plural-aware text string processor (1 egg, 2 eggs)
+N_ = gpodder.ngettext
+
+# Set up module-level logger.
 logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
 
 
 class PodcastMetadataError(Exception):
@@ -414,9 +421,28 @@ class AppleITunesSearchMetadataProvider(PodcastMetadataProvider):
         })
 
         episodes = []
+
         for item in data.get('results', []):
-            if item.get('wrapperType') == 'track' or item.get('kind') == 'podcast-episode':
+            if item.get('wrapperType') == 'collection':
+                continue
+
+            if (item.get('kind') == 'podcast-episode' or
+                item.get('wrapperType') == 'track' or
+                item.get('episodeUrl') or
+                item.get('trackName')):
                 episodes.append(self._episode_from_result(item))
+
+        logger.info(
+            'Apple lookup returned result types: %s',
+            [
+                {
+                    'wrapperType': item.get('wrapperType'),
+                    'kind': item.get('kind'),
+                    'trackName': item.get('trackName'),
+                }
+                for item in data.get('results', [])[:10]
+            ],
+        )
 
         return episodes
 
@@ -439,14 +465,101 @@ class PodcastMetadataService(object):
 
         for provider in self.providers:
             if not provider.is_configured():
+                logger.warning(
+                    'Skipping metadata provider %s because it is not configured',
+                    provider.name,
+                )
                 continue
 
             try:
-                results.extend(provider.search_podcasts(query, limit))
-            except Exception:
-                logger.warning('Metadata provider failed: %s', provider.name, exc_info=True)
+                logger.info('Searching metadata provider %s for query: %s', provider.name, query)
+                provider_results = provider.search_podcasts(query, limit)
+                logger.info(
+                    'Metadata provider %s returned %d result(s)',
+                    provider.name,
+                    len(provider_results),
+                )
+                results.extend(provider_results)
 
-        return self._dedupe_podcasts(results)[:limit]
+            except Exception:
+                logger.warning(
+                    'Metadata provider failed: %s',
+                    provider.name,
+                    exc_info=True,
+                )
+
+        results = self._dedupe_podcasts(results)
+
+        logger.info(
+            'Combined metadata search returned %d deduped result(s)',
+            len(results),
+        )
+
+        return results[:limit]
+
+    def search_podcasts_from_all_providers(self, query, limit_per_provider=25,
+                                           dedupe_across_sources=False):
+        """Search all configured podcast metadata providers.
+
+        Unlike search_podcasts(), this is intended for UI result selection.
+        It preserves provider/source visibility so the user can see whether a
+        result came from Podcast Index, Apple iTunes, or another provider.
+        """
+
+        results = []
+
+        for provider in self.providers:
+            if not provider.is_configured():
+                logger.warning(
+                    'Skipping metadata provider %s because it is not configured',
+                    provider.name,
+                )
+                continue
+
+            try:
+                logger.info(
+                    'Searching metadata provider %s for query: %s',
+                    provider.name,
+                    query,
+                )
+
+                provider_results = provider.search_podcasts(
+                    query,
+                    limit=limit_per_provider,
+                )
+
+                logger.info(
+                    'Metadata provider %s returned %d podcast result(s)',
+                    provider.name,
+                    len(provider_results),
+                )
+
+                results.extend(provider_results)
+
+            except Exception:
+                logger.warning(
+                    'Metadata provider failed during all-provider podcast search: %s',
+                    provider.name,
+                    exc_info=True,
+                )
+
+        if dedupe_across_sources:
+            results = self._dedupe_podcasts(results)
+        else:
+            results = self._dedupe_podcasts_by_source(results)
+
+        source_counts = {}
+        for podcast in results:
+            source = getattr(podcast, 'source', None) or '(unknown)'
+            source_counts[source] = source_counts.get(source, 0) + 1
+
+        logger.info(
+            'All-provider podcast search returned %d result(s) by source: %s',
+            len(results),
+            source_counts,
+        )
+
+        return results
 
     def lookup_by_feed_url(self, feed_url):
         for provider in self.providers:
@@ -476,7 +589,351 @@ class PodcastMetadataService(object):
 
         return []
 
+    def get_episodes_from_all_providers(self, podcast, limit=25):
+        """Return episode metadata from all configured non-RSS providers.
+
+        Each provider resolves the podcast independently so provider-specific IDs
+        are correct. This is required because Podcast Index feed IDs and Apple
+        collection IDs are not interchangeable.
+        """
+
+        results = []
+
+        feed_url = getattr(podcast, 'feed_url', None) or getattr(podcast, 'url', None)
+        title = getattr(podcast, 'title', None)
+
+        logger.info(
+            'Getting episodes from all providers: title=%r feed_url=%r',
+            title,
+            feed_url,
+        )
+
+        for provider in self.providers:
+            if not provider.is_configured():
+                logger.info('Skipping unconfigured episode provider: %s', provider.name)
+                continue
+
+            # RSS is handled separately by apply_rss_description_fallback().
+            if provider.name == 'rss':
+                logger.info('Skipping RSS since it is handled separately by apply_rss_description_fallback()')
+                continue
+
+            try:
+                provider_podcast = self._resolve_podcast_for_provider(
+                    provider,
+                    title=title,
+                    feed_url=feed_url,
+                )
+
+                if provider_podcast is None:
+                    logger.info(
+                        'Episode provider %s could not resolve podcast: title=%r feed_url=%r',
+                        provider.name,
+                        title,
+                        feed_url,
+                    )
+                    continue
+
+                logger.info(
+                    'Episode provider %s resolved podcast: title=%r feed_url=%r source_id=%r',
+                    provider.name,
+                    getattr(provider_podcast, 'title', None),
+                    getattr(provider_podcast, 'feed_url', None),
+                    getattr(provider_podcast, 'source_id', None),
+                )
+
+                episodes = provider.get_episodes(provider_podcast, limit=limit)
+
+                logger.info(
+                    'Episode provider %s returned %d episode(s)',
+                    provider.name,
+                    len(episodes),
+                )
+
+                results.extend(episodes)
+
+            except Exception:
+                logger.warning(
+                    'Episode provider failed: %s',
+                    provider.name,
+                    exc_info=True,
+                )
+
+        results = self._dedupe_episodes_by_source(results)
+
+        source_counts = {}
+        for episode in results:
+            source = getattr(episode, 'source', None) or '(unknown)'
+            source_counts[source] = source_counts.get(source, 0) + 1
+
+        logger.info(
+            'All-provider episode search returned %d result(s) by source: %s',
+            len(results),
+            source_counts,
+        )
+
+        return results
+
+    def _best_podcast_match(self, matches, title=None, feed_url=None):
+        if not matches:
+            return None
+
+        norm_feed_url = self._norm_key(feed_url)
+        norm_title = self._norm_title(title)
+
+        if norm_feed_url:
+            for match in matches:
+                if self._norm_key(getattr(match, 'feed_url', None)) == norm_feed_url:
+                    return match
+
+        if norm_title:
+            for match in matches:
+                if self._norm_title(getattr(match, 'title', None)) == norm_title:
+                    return match
+
+        return matches[0]
+
+    def get_episodes_with_rss_description_fallback(self, podcast, limit=25):
+        """Return episodes using normal provider order, then improve weak
+        descriptions from the podcast RSS feed when possible.
+
+        This preserves the existing first-provider-wins behavior.
+        """
+
+        episodes = self.get_episodes(podcast, limit=limit)
+
+        return self.apply_rss_description_fallback(
+            podcast,
+            episodes,
+            limit=limit,
+        )
+
+    def apply_rss_description_fallback(self, podcast, episodes, limit=25):
+        """Fill short/truncated episode descriptions from the podcast RSS feed.
+
+        This does not decide where the episode list comes from. It only improves
+        the descriptions of the episode objects passed in.
+        """
+
+        if not episodes:
+            return []
+
+        feed_url = getattr(podcast, 'feed_url', None)
+        if not feed_url:
+            logger.info(
+                'RSS description fallback skipped because podcast has no feed_url: %r',
+                getattr(podcast, 'title', None),
+            )
+            return episodes
+
+        try:
+            rss_provider = RSSFeedMetadataProvider()
+            rss_episodes = rss_provider.get_episodes(feed_url, limit=max(limit, 200))
+        except Exception:
+            logger.warning(
+                'RSS description fallback failed for feed_url=%s',
+                feed_url,
+                exc_info=True,
+            )
+            return episodes
+
+        if not rss_episodes:
+            logger.info(
+                'RSS description fallback found no RSS episodes for feed_url=%s',
+                feed_url,
+            )
+            return episodes
+
+        rss_index = self._build_episode_match_index(rss_episodes)
+
+        updated_count = 0
+
+        for episode in episodes:
+            rss_episode = self._find_matching_episode(episode, rss_index)
+
+            if rss_episode is None:
+                continue
+
+            if self._should_replace_description(
+                    getattr(episode, 'description', None),
+                    getattr(rss_episode, 'description', None)):
+                episode.description = rss_episode.description
+                updated_count += 1
+
+                try:
+                    episode.raw['description_source'] = 'rss-fallback'
+                except Exception:
+                    pass
+
+                logger.info(
+                    'Replaced short metadata description from RSS: title=%r source=%s rss_desc_len=%d',
+                    getattr(episode, 'title', None),
+                    getattr(episode, 'source', None),
+                    len(rss_episode.description or ''),
+                )
+
+        logger.info(
+            'RSS description fallback updated %d of %d episode description(s)',
+            updated_count,
+            len(episodes),
+        )
+
+        return episodes
+
+    def _resolve_podcast_for_provider(self, provider, title=None, feed_url=None):
+        """Resolve a podcast using the provider's own lookup/search methods."""
+
+        provider_podcast = None
+
+        if feed_url:
+            try:
+                provider_podcast = provider.lookup_by_feed_url(feed_url)
+            except Exception:
+                logger.warning(
+                    'Provider %s lookup_by_feed_url failed for %r',
+                    provider.name,
+                    feed_url,
+                    exc_info=True,
+                )
+
+        if provider_podcast is not None:
+            return provider_podcast
+
+        if title:
+            try:
+                matches = provider.search_podcasts(title, limit=10)
+            except Exception:
+                logger.warning(
+                    'Provider %s search_podcasts failed for %r',
+                    provider.name,
+                    title,
+                    exc_info=True,
+                )
+                return None
+
+            return self._best_podcast_match(
+                matches,
+                title=title,
+                feed_url=feed_url,
+            )
+
+        return None
+
+    def _should_replace_description(self, current_description, rss_description):
+        current = (current_description or '').strip()
+        rss = (rss_description or '').strip()
+
+        if not rss:
+            return False
+
+        if not current:
+            return True
+
+        current_looks_truncated = (
+            current.endswith('...') or
+            current.endswith('…')
+        )
+
+        if current_looks_truncated and len(rss) > len(current):
+            return True
+
+        if len(rss) >= max(len(current) * 2, len(current) + 300):
+            return True
+
+        return False
+
+    def _build_episode_match_index(self, episodes):
+        index = {
+            'guid': {},
+            'url': {},
+            'link': {},
+            'title_published': {},
+            'title': {},
+        }
+
+        for episode in episodes:
+            guid = self._norm_key(getattr(episode, 'guid', None))
+            url = self._norm_key(getattr(episode, 'url', None))
+            link = self._norm_key(getattr(episode, 'link', None))
+            title = self._norm_title(getattr(episode, 'title', None))
+            published_key = self._published_key(getattr(episode, 'published', None))
+
+            if guid:
+                index['guid'][guid] = episode
+
+            if url:
+                index['url'][url] = episode
+
+            if link:
+                index['link'][link] = episode
+
+            if title and published_key:
+                index['title_published'][(title, published_key)] = episode
+
+            if title:
+                index['title'].setdefault(title, episode)
+
+        return index
+
+    def _find_matching_episode(self, episode, rss_index):
+        guid = self._norm_key(getattr(episode, 'guid', None))
+        url = self._norm_key(getattr(episode, 'url', None))
+        link = self._norm_key(getattr(episode, 'link', None))
+        title = self._norm_title(getattr(episode, 'title', None))
+        published_key = self._published_key(getattr(episode, 'published', None))
+
+        if guid and guid in rss_index['guid']:
+            return rss_index['guid'][guid]
+
+        if url and url in rss_index['url']:
+            return rss_index['url'][url]
+
+        if link and link in rss_index['link']:
+            return rss_index['link'][link]
+
+        if title and published_key:
+            match = rss_index['title_published'].get((title, published_key))
+            if match is not None:
+                return match
+
+        if title:
+            return rss_index['title'].get(title)
+
+        return None
+
+    def _norm_key(self, value):
+        value = (value or '').strip()
+        return value.lower() if value else ''
+
+
+    def _norm_title(self, value):
+        value = (value or '').strip().lower()
+        if not value:
+            return ''
+
+        return ' '.join(value.split())
+
+
+    def _published_key(self, value):
+        if value is None:
+            return ''
+
+        try:
+            if isinstance(value, int):
+                return time.strftime('%Y-%m-%d', time.localtime(value))
+
+            value = str(value).strip()
+            if len(value) >= 10:
+                return value[:10]
+
+        except Exception:
+            logger.debug('Could not normalize published date: %r', value, exc_info=True)
+
+        return ''
+
+    # Remove duplicate podcasts based on feed URL, website URL, or title.
     def _dedupe_podcasts(self, podcasts):
+        """Remove duplicate podcast results across all providers/sources."""
         result = []
         seen = set()
 
@@ -494,28 +951,164 @@ class PodcastMetadataService(object):
 
         return result
 
+    def _dedupe_podcasts_by_source(self, podcasts):
+        """Remove duplicate podcast results only within the same provider/source.
+
+        This preserves source visibility in UI search results. For example, the
+        same podcast returned by Podcast Index and Apple iTunes will appear twice,
+        once for each source, but duplicate Apple results are collapsed.
+        """
+
+        result = []
+        seen = set()
+
+        for podcast in podcasts:
+            source = getattr(podcast, 'source', None) or ''
+
+            key = (
+                getattr(podcast, 'feed_url', None) or
+                getattr(podcast, 'website_url', None) or
+                getattr(podcast, 'title', None)
+            )
+
+            if not key:
+                continue
+
+            dedupe_key = '%s|%s' % (
+                source.strip().lower(),
+                key.strip().lower(),
+            )
+
+            if dedupe_key in seen:
+                continue
+
+            seen.add(dedupe_key)
+            result.append(podcast)
+
+        return result
+
+    # Remove duplicate episodes based on guid, url, link, or title+published date.
+    def _dedupe_episodes(self, episodes):
+        """Remove duplicate episodes results across all providers/sources."""
+
+        result = []
+        seen = set()
+
+        for episode in episodes:
+            key = (
+                self._norm_key(getattr(episode, 'guid', None)) or
+                self._norm_key(getattr(episode, 'url', None)) or
+                self._norm_key(getattr(episode, 'link', None))
+            )
+
+            if not key:
+                title = self._norm_title(getattr(episode, 'title', None))
+                published = self._published_key(getattr(episode, 'published', None))
+                key = '%s|%s' % (title, published)
+
+            if not key or key in seen:
+                continue
+
+            seen.add(key)
+            result.append(episode)
+
+        return result
+
+    # Remove duplicate podcasts only within the same source to preserve visibility of
+    # duplicates across sources.
+    def _dedupe_episodes_by_source(self, episodes):
+        """Remove duplicate episode results only within the same provider/source."""
+
+        result = []
+        seen = set()
+
+        for episode in episodes:
+            source = getattr(episode, 'source', None) or ''
+
+            key = (
+                self._norm_key(getattr(episode, 'guid', None)) or
+                self._norm_key(getattr(episode, 'url', None)) or
+                self._norm_key(getattr(episode, 'link', None))
+            )
+
+            if not key:
+                title = self._norm_title(getattr(episode, 'title', None))
+                published = self._published_key(getattr(episode, 'published', None))
+                key = '%s|%s' % (title, published)
+
+            if not key:
+                continue
+
+            dedupe_key = '%s|%s' % (source.strip().lower(), key)
+
+            if dedupe_key in seen:
+                continue
+
+            seen.add(dedupe_key)
+            result.append(episode)
+
+        return result
+
+
 # Module-level helper function
 def create_metadata_service(config, include_rss=True):
+    """Create the configured podcast metadata service."""
+
     providers = []
 
     if include_rss:
+        logger.info('Adding RSS metadata provider')
         providers.append(RSSFeedMetadataProvider())
 
     try:
-        if config.metadata.podcast_index.enabled:
+        enabled = config.metadata.podcast_index.enabled
+        api_key = config.metadata.podcast_index.api_key
+        api_secret = config.metadata.podcast_index.api_secret
+
+        logger.info(
+            'Podcast Index config info: '
+            'enabled=%s, api_key_present=%s, api_secret_present=%s',
+            enabled,
+            bool(api_key),
+            bool(api_secret),
+        )
+
+        if enabled and api_key and api_secret:
             providers.append(PodcastIndexMetadataProvider(
-                api_key=config.metadata.podcast_index.api_key,
-                api_secret=config.metadata.podcast_index.api_secret,
+                api_key=api_key,
+                api_secret=api_secret,
                 user_agent='gPodder+/1.0',
             ))
+            logger.info('Adding Podcast Index metadata provider')
+        else:
+            logger.warning(
+                'Skipping Podcast Index due to missing config info: '
+                'enabled=%s, api_key_present=%s, api_secret_present=%s',
+                enabled,
+                bool(api_key),
+                bool(api_secret),
+            )
+
     except AttributeError:
         logger.warning('Podcast Index metadata config is missing', exc_info=True)
 
     try:
-        if config.metadata.apple_itunes.enabled:
+        enabled = config.metadata.apple_itunes.enabled
+        logger.info('Apple iTunes metadata config: enabled=%s', enabled)
+
+        if enabled:
             providers.append(AppleITunesSearchMetadataProvider())
+            logger.info('Adding Apple iTunes metadata provider')
+        else:
+            logger.warning('Skipping Apple iTunes metadata provider because it is disabled')
+
     except AttributeError:
-        logger.warning('Apple iTunes metadata config is missing', exc_info=True)
+        logger.warning('Apple iTunes metadata config is missing; enabling Apple fallback', exc_info=True)
         providers.append(AppleITunesSearchMetadataProvider())
+
+    logger.info(
+        'Active metadata providers: %s',
+        ', '.join(provider.name for provider in providers) or '(none)'
+    )
 
     return PodcastMetadataService(providers)

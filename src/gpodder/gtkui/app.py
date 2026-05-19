@@ -45,11 +45,15 @@ import gi  # isort:skip
 gi.require_version('Gtk', '3.0')  # isort:skip
 from gi.repository import GdkPixbuf, Gio, GLib, Gtk  # isort:skip
 
-
-logger = logging.getLogger(__name__)
-
+# Text string processor for internationalization/localization.
 _ = gpodder.gettext
+
+# Plural-aware text string processor (1 egg, 2 eggs)
 N_ = gpodder.ngettext
+
+# Set up module-level logger.
+logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
 
 
 def parse_app_menu_for_accels(filename):
@@ -270,6 +274,7 @@ class gPodderApplication(Gtk.Application):
                 self.have_settings_portal = False
                 self._set_default_color_scheme('light')
                 self.set_dark_mode(self.window.config.ui.gtk.color_scheme == 'dark')
+
             else:
                 self.read_portal_color_scheme()
                 gpodder.dbus_session_bus.add_signal_receiver(
@@ -304,6 +309,7 @@ class gPodderApplication(Gtk.Application):
             self.window.load_custom_gtk_css()
             self.window.update_episode_list_model()
             self.window.update_podcast_list_model()
+            self.window.load_custom_gtk_css()
         #RobL--^
 
     def read_portal_color_scheme(self):

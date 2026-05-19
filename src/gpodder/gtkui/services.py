@@ -24,6 +24,8 @@
 
 
 import logging
+import os       #RobL
+import time     #RobL
 
 from gi.repository import GdkPixbuf
 
@@ -31,9 +33,15 @@ import gpodder
 from gpodder import coverart, util
 from gpodder.services import ObservableService
 
+# Text string processor for internationalization/localization.
 _ = gpodder.gettext
 
+# Plural-aware text string processor (1 egg, 2 eggs)
+N_ = gpodder.ngettext
+
+# Set up module-level logger.
 logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
 
 
 class CoverDownloader(ObservableService):
@@ -97,11 +105,13 @@ class CoverDownloader(ObservableService):
                     channel.auth_username, channel.auth_password,
                     not avoid_downloading)
 
+        #Rob--v
+        # Replaced deletion of old cover image with saving it as a backup.
         if url is not None:
             filename = get_filename()
             if filename.startswith(channel.cover_file):
                 logger.info('Replacing cover: %s', filename)
-                util.delete_file(filename)
+                self.backup_existing_cover(filename)
 
         filename = get_filename()
         pixbuf = None
@@ -124,3 +134,30 @@ class CoverDownloader(ObservableService):
             self.notify('cover-available', channel, pixbuf)
         else:
             return (channel.url, pixbuf)
+
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+    def backup_existing_cover(self, filename):
+        """Rename an existing cover file instead of deleting it."""
+
+        if not filename:
+            return
+
+        if not os.path.exists(filename):
+            return
+
+        dirname = os.path.dirname(filename)
+        ext = os.path.splitext(filename)[1] or '.jpg'
+
+        backup_filename = os.path.join(dirname, 'old_cover%s' % ext)
+
+        # Avoid overwriting a previous backup.
+        if os.path.exists(backup_filename):
+            timestamp = time.strftime('%Y%m%d-%H%M%S')
+            backup_filename = os.path.join(dirname, 'old_cover_%s%s' % (timestamp, ext))
+
+        try:
+            logger.info('Backing up existing cover: %s -> %s', filename, backup_filename)
+            os.replace(filename, backup_filename)
+        except Exception:
+            logger.warning('Could not back up existing cover: %s', filename, exc_info=True)
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-

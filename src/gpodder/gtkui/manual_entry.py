@@ -19,47 +19,11 @@ Added in this version:
       - comments/comment/description tag -> episode description
       - title tag -> episode title
       - file modified timestamp -> published date
-
-Expected minimal integration points in gpodder/src/gpodder/gtkui/main.py:
-
-    from .manual_entry import ManualEntryController
-
-    # in new(), before self.create_actions()
-    self.manual_entry_controller = ManualEntryController(self)
-
-    # in create_actions(), after action group `g` is created
-    self.manual_entry_controller.install_actions(g)
-
-Expected menu additions in share/gpodder/ui/gtk/menus.ui:
-
-    <item>
-      <attribute name="action">win.manualAddPodcast</attribute>
-      <attribute name="label" translatable="yes">Add podcast manually</attribute>
-    </item>
-
-    <item>
-      <attribute name="action">win.manualEditPodcast</attribute>
-      <attribute name="label" translatable="yes">Edit selected podcast</attribute>
-    </item>
-
-    <item>
-      <attribute name="action">win.manualAddEpisode</attribute>
-      <attribute name="label" translatable="yes">Add episode manually</attribute>
-    </item>
-
-    <item>
-      <attribute name="action">win.manualAddEpisodeBatch</attribute>
-      <attribute name="label" translatable="yes">Add episode batch manually</attribute>
-    </item>
-
-    <item>
-      <attribute name="action">win.manualEditEpisode</attribute>
-      <attribute name="label" translatable="yes">Edit selected episode</attribute>
-    </item>
 """
 
 import datetime as _dt
 import hashlib
+import html
 import logging
 import mimetypes
 import os
@@ -92,10 +56,20 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
+# Text string processor for internationalization/localization.
 _ = gpodder.gettext
 
-logger = logging.getLogger(__name__)
+# Plural-aware text string processor (1 egg, 2 eggs)
+N_ = gpodder.ngettext
 
+# Set up module-level logger.
+logger = logging.getLogger(__name__)
+#logger.setLevel(logging.INFO)
+
+# Constant values used within this module.
+DEFAULT_COL_SPACING = 14
+DEFAULT_ROW_SPACING = 10
+DEFAULT_MARGIN = 12
 
 class ManualEntryError(Exception):
     pass
@@ -304,7 +278,7 @@ class ManualPodcastMetadataSearchDialog(Gtk.Dialog):
         )
         self.set_default_response(Gtk.ResponseType.OK)
         self.set_border_width(12)
-        self.set_default_size(900, 520)
+        self.set_default_size(1050, 700)
 
         area = self.get_content_area()
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -322,7 +296,7 @@ class ManualPodcastMetadataSearchDialog(Gtk.Dialog):
         search_row.pack_start(self.search_entry, True, True, 0)
 
         self.search_button = Gtk.Button.new_with_label(_('Search'))
-        self.search_button.connect('clicked', self.on_search_clicked)
+        self.search_button.connect('clicked', self.on_search_podcasts_clicked)
         search_row.pack_start(self.search_button, False, False, 0)
 
         self.status_label = Gtk.Label(label='', xalign=0)
@@ -337,7 +311,7 @@ class ManualPodcastMetadataSearchDialog(Gtk.Dialog):
             (_('Title'), self.COL_TITLE, 240),
             (_('Feed URL'), self.COL_FEED_URL, 300),
             (_('Website'), self.COL_WEBSITE_URL, 220),
-            (_('Source'), self.COL_SOURCE, 100),
+            (_('Source'), self.COL_SOURCE, 140),
         ):
             renderer = Gtk.CellRendererText()
             renderer.set_property('ellipsize', 3)  # Pango.EllipsizeMode.END without new import
@@ -374,9 +348,9 @@ class ManualPodcastMetadataSearchDialog(Gtk.Dialog):
         self.show_all()
 
         if initial_query:
-            GLib.idle_add(self.on_search_clicked, self.search_button)
+            GLib.idle_add(self.on_search_podcasts_clicked, self.search_button)
 
-    def on_search_clicked(self, button):
+    def on_search_podcasts_clicked(self, button):
         query = self.search_entry.get_text().strip()
         if not query:
             self.status_label.set_text(_('Enter a podcast name or keyword to search.'))
@@ -391,8 +365,24 @@ class ManualPodcastMetadataSearchDialog(Gtk.Dialog):
             Gtk.main_iteration_do(False)
 
         try:
-            service = podcastmetadata.create_metadata_service(self.config)
-            podcasts = service.search_podcasts(query, limit=50)
+            service = podcastmetadata.create_metadata_service(self.config, include_rss=False)
+
+            podcasts = service.search_podcasts_from_all_providers(
+                query,
+                limit_per_provider=50,
+                dedupe_across_sources=False,
+            )
+
+            source_counts = {}
+            for podcast in podcasts:
+                source = getattr(podcast, 'source', None) or '(unknown)'
+                source_counts[source] = source_counts.get(source, 0) + 1
+
+            logger.info(
+                'Manual podcast metadata search results by source: %s',
+                source_counts,
+            )
+
         except Exception as exc:
             logger.warning('Podcast metadata search failed', exc_info=True)
             self.status_label.set_text(_('Search failed: %s') % str(exc))
@@ -438,27 +428,256 @@ class ManualPodcastMetadataSearchDialog(Gtk.Dialog):
     def get_selected_podcast(self):
         return self.selected_podcast
 
+
+class ManualPodcastMetadataApplyDialog(Gtk.Dialog):
+    """Choose the metadata fields to copy into the manual podcast add/edit dialog."""
+
+    FIELD_TITLE = 'title'
+    FIELD_FEED_URL = 'feed_url'
+    FIELD_WEBSITE_URL = 'website_url'
+    FIELD_COVER_URL = 'cover_url'
+    FIELD_SECTION = 'section'
+    FIELD_DESCRIPTION = 'description'
+
+    def __init__(self, parent, metadata, current_values=None, is_edit=False):
+        super().__init__(
+            title=_('Apply podcast metadata'),
+            transient_for=parent,
+            modal=True,
+        )
+
+        self.metadata = metadata
+        self.current_values = current_values or {}
+        self.is_edit = is_edit
+        self.checkboxes = {}
+
+        self.add_buttons(
+            _('_Cancel'), Gtk.ResponseType.CANCEL,
+            _('_Apply Selected'), Gtk.ResponseType.OK,
+        )
+
+        self.set_default_response(Gtk.ResponseType.OK)
+        self.set_border_width(12)
+        self.set_default_size(1050, 700)
+
+        area = self.get_content_area()
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        outer.set_hexpand(True)
+        outer.set_vexpand(True)
+        area.add(outer)
+
+        note = Gtk.Label(
+            label=_('Select the metadata fields to copy into the podcast settings dialog.'),
+            xalign=0,
+        )
+        outer.pack_start(note, False, False, 0)
+
+        # Place the row grid inside a ScrolledWindow in case there are many fields or the description is long.
+        grid = Gtk.Grid(column_spacing=DEFAULT_COL_SPACING, row_spacing=DEFAULT_ROW_SPACING,
+                        margin=DEFAULT_MARGIN)  # Was: 14, 10, undefined
+        grid.set_hexpand(True)
+        grid.set_vexpand(True)
+        grid.set_column_homogeneous(False)
+
+        grid_sw = Gtk.ScrolledWindow()
+        grid_sw.set_hexpand(True)
+        grid_sw.set_vexpand(True)
+        grid_sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        grid_sw.add(grid)
+        outer.pack_start(grid_sw, True, True, 0)
+
+        # Format the grid with 4 columns: checkbox, field name, current value, online value.
+        # Use CSS style classes to visually differentiate current vs online values.
+        grid.attach(self._make_header_label(_('Use')), 0, 0, 1, 1)
+        grid.attach(self._make_header_label(_('Field')), 1, 0, 1, 1)
+        grid.attach(self._make_header_label(_('Current value')), 2, 0, 1, 1)
+        grid.attach(self._make_header_label(_('Online value')), 3, 0, 1, 1)
+
+        section = ''
+        if getattr(metadata, 'categories', None):
+            section = metadata.categories[0] or ''
+
+        rows = [
+            (
+                self.FIELD_TITLE,
+                _('Title'),
+                current_values.get('title', ''),
+                metadata.title or '',
+                True,
+            ),
+            (
+                self.FIELD_FEED_URL,
+                _('Feed URL'),
+                current_values.get('feed_url', ''),
+                metadata.feed_url or '',
+                not is_edit,
+            ),
+            (
+                self.FIELD_WEBSITE_URL,
+                _('Website Link'),
+                current_values.get('website_url', ''),
+                metadata.website_url or '',
+                True,
+            ),
+            (
+                self.FIELD_COVER_URL,
+                _('Cover Art URL'),
+                current_values.get('cover_url', ''),
+                metadata.image_url or '',
+                True,
+            ),
+            (
+                self.FIELD_SECTION,
+                _('Section'),
+                current_values.get('section', ''),
+                section,
+                False,
+            ),
+            (
+                self.FIELD_DESCRIPTION,
+                _('Description'),
+                current_values.get('description', ''),
+                metadata.description or '',
+                True,
+            ),
+        ]
+
+        row_num = 1
+
+        # Loop to create a row for each metadata field with a checkbox, field label,
+        # current value, and online value.
+        for field_name, label, current_value, online_value, default_checked in rows:
+            has_online_value = bool((online_value or '').strip())
+
+            checkbox = Gtk.CheckButton()
+            checkbox.set_active(default_checked and has_online_value)
+            checkbox.set_sensitive(has_online_value)
+            self.checkboxes[field_name] = checkbox
+
+            # Format field within an EventBox to highlight them.
+            field_label = Gtk.Label()
+            field_label.set_markup('<b>%s</b>' % html.escape(label))
+            field_label.set_xalign(0)
+
+            # Put current and online values in an EventBox to get a visible background.
+            # The description field gets a multi-line TextView inside a ScrolledWindow,
+            # while other fields get a single-line Label. Both use CSS classes to
+            # visually differentiate current vs online values.
+            if field_name == self.FIELD_DESCRIPTION:
+                current_box = self._make_description_box(
+                    current_value,
+                    'metadata-current-value',
+                )
+                online_box = self._make_description_box(
+                    online_value,
+                    'metadata-online-value',
+                )
+            else:
+                current_box = self._make_value_box(
+                    current_value,
+                    'metadata-current-value',
+                )
+                online_box = self._make_value_box(
+                    online_value,
+                    'metadata-online-value',
+                )
+
+            grid.attach(checkbox, 0, row_num, 1, 1)
+            grid.attach(field_label, 1, row_num, 1, 1)
+            grid.attach(current_box, 2, row_num, 1, 1)
+            grid.attach(online_box, 3, row_num, 1, 1)
+
+            row_num += 1
+
+        self.show_all()
+
+    def _shorten(self, value, max_len=180):
+        value = (value or '').strip().replace('\r', ' ').replace('\n', ' ')
+        if len(value) > max_len:
+            return value[:max_len - 3] + '...'
+        return value
+
+    def get_selected_fields(self):
+        return {
+            field_name
+            for field_name, checkbox in self.checkboxes.items()
+            if checkbox.get_active()
+        }
+
+    def _make_header_label(self, text):
+        label = Gtk.Label(label=text, xalign=0)
+        label.get_style_context().add_class('metadata-apply-header')
+        return label
+
+    def _make_value_box(self, text, css_class):
+        label = Gtk.Label(label=self._shorten(text), xalign=0)
+        label.set_line_wrap(True)
+        label.set_selectable(True)
+        label.set_tooltip_text(text or '')
+
+        # EventBox lets GTK apply a visible background around the label.
+        box = Gtk.EventBox()
+        box.set_visible_window(True)
+        box.set_hexpand(True)
+        box.get_style_context().add_class(css_class)
+        box.add(label)
+
+        return box
+
+    def _make_description_box(self, text, css_class):
+        text = text or ''
+
+        textview = Gtk.TextView()
+        textview.set_wrap_mode(Gtk.WrapMode.WORD)
+        textview.set_editable(False)
+        textview.set_cursor_visible(False)
+        textview.set_hexpand(True)
+        textview.set_vexpand(True)
+
+        buf = textview.get_buffer()
+        buf.set_text(text)
+
+        # Apply the same visual styling class to the TextView.
+        textview.get_style_context().add_class(css_class)
+
+        sw = Gtk.ScrolledWindow()
+        sw.set_hexpand(True)
+        sw.set_vexpand(True)
+        sw.set_min_content_height(140)
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        sw.add(textview)
+
+        # Also apply styling to the scrolled window so the box stands out.
+        sw.get_style_context().add_class(css_class)
+
+        return sw
+
+
 class ManualPodcastDialog(Gtk.Dialog):
     def __init__(self, parent, config, podcast=None):
         self.config = config
         self.podcast = podcast
+        self.is_edit = podcast is not None
         self.metadata_image_url = None
-        is_edit = podcast is not None
+
         super().__init__(
-            title=_('Edit selected podcast') if is_edit else _('Add podcast manually'),
+            title=_('Edit selected podcast') if self.is_edit else _('Add podcast manually'),
             transient_for=parent,
             modal=True,
         )
+
         self.add_buttons(
             _('_Cancel'), Gtk.ResponseType.CANCEL,
-            _('_Save') if is_edit else _('_Add'), Gtk.ResponseType.OK,
+            _('_Save') if self.is_edit else _('_Add'), Gtk.ResponseType.OK,
         )
         self.set_default_response(Gtk.ResponseType.OK)
         self.set_border_width(12)
-        self.set_default_size(720, 600)
+        self.set_default_size(760, 680)
 
         area = self.get_content_area()
-        grid = Gtk.Grid(column_spacing=12, row_spacing=8, margin=12)
+        grid = Gtk.Grid(column_spacing=DEFAULT_COL_SPACING, row_spacing=DEFAULT_ROW_SPACING,
+                        margin=DEFAULT_MARGIN)  # Was: 12, 8, 12
         area.add(grid)
 
         # Add a field for podcast title.
@@ -478,6 +697,11 @@ class ManualPodcastDialog(Gtk.Dialog):
         # Add a field for the podcast's website link.
         self.podcast_website_link_entry = Gtk.Entry()
         self.podcast_website_link_entry.set_placeholder_text('https://example.com')
+
+        # Add a field for the podcast cover/artwork URL.
+        self.podcast_cover_url_entry = Gtk.Entry()
+        self.podcast_cover_url_entry.set_placeholder_text('https://example.com/cover.jpg')
+        self.podcast_cover_url_entry.set_hexpand(True)
 
         # Add a field for the podcast display section - use Other as the default.
         self.podcast_section_entry = Gtk.Entry()
@@ -503,6 +727,7 @@ class ManualPodcastDialog(Gtk.Dialog):
             (_('Title'), title_box),
             (_('Feed URL'), self.podcast_feed_url_entry),
             (_('Website Link'), self.podcast_website_link_entry),
+            (_('Cover Art URL'), self.podcast_cover_url_entry),
             (_('Section'), self.podcast_section_entry),
             (_('Description'), podcast_desc_sw),
         ):
@@ -513,13 +738,15 @@ class ManualPodcastDialog(Gtk.Dialog):
 
         # If editing an existing podcast, populate the fields with the current data
         # otherwise leave them blank for the user to fill in.
-        if is_edit:
+        if self.is_edit:
             self.podcast_title_entry.set_text(podcast.title or '')
             self.podcast_feed_url_entry.set_text(podcast.url or '')
             self.podcast_website_link_entry.set_text(podcast.link or '')
+            self.podcast_cover_url_entry.set_text(getattr(podcast, 'cover_url', None) or '')
             self.podcast_section_entry.set_text(getattr(podcast, 'section', '') or _('Other'))
             buf = self.podcast_description.get_buffer()
             buf.set_text((podcast.description or '').strip())
+            self.metadata_image_url = getattr(podcast, 'cover_url', None)
             # Debug - display some of the podcast attributes to troubleshoot.
             #logger.warning('podcast title: %s', getattr(podcast, 'title', None))
             #logger.warning('podcast.url: %s', getattr(podcast, 'url', None))
@@ -540,64 +767,610 @@ class ManualPodcastDialog(Gtk.Dialog):
 
         try:
             response = dialog.run()
-            if response == Gtk.ResponseType.OK:
-                metadata = dialog.get_selected_podcast()
-                if metadata is not None:
-                    self.apply_metadata(metadata)
+            if response != Gtk.ResponseType.OK:
+                return
+
+            metadata = dialog.get_selected_podcast()
+            if metadata is None:
+                return
+
+            metadata = self.enrich_selected_podcast_metadata(metadata)
+
         finally:
             dialog.destroy()
 
-    def apply_metadata(self, metadata):
+        self.choose_and_apply_podcast_metadata(metadata)
+
+    def apply_metadata(self, metadata, selected_fields):
         """Copy selected online metadata into the manual podcast form.
 
         This intentionally overwrites fields in the dialog only. The user still
         has to click Add/Save before anything is written to the database.
         """
+        if ManualPodcastMetadataApplyDialog.FIELD_TITLE in selected_fields:
+            if metadata.title:
+                self.podcast_title_entry.set_text(metadata.title)
 
-        if metadata.title:
-            self.podcast_title_entry.set_text(metadata.title)
+        if ManualPodcastMetadataApplyDialog.FIELD_FEED_URL in selected_fields:
+            if metadata.feed_url:
+                self.podcast_feed_url_entry.set_text(metadata.feed_url)
 
-        if metadata.feed_url:
-            self.podcast_feed_url_entry.set_text(metadata.feed_url)
+        if ManualPodcastMetadataApplyDialog.FIELD_WEBSITE_URL in selected_fields:
+            if metadata.website_url:
+                self.podcast_website_link_entry.set_text(metadata.website_url)
 
-        if metadata.website_url:
-            self.podcast_website_link_entry.set_text(metadata.website_url)
+        if ManualPodcastMetadataApplyDialog.FIELD_COVER_URL in selected_fields:
+            if metadata.image_url:
+                self.podcast_cover_url_entry.set_text(metadata.image_url)
 
-        if metadata.description:
-            buf = self.podcast_description.get_buffer()
-            buf.set_text(metadata.description)
+        if ManualPodcastMetadataApplyDialog.FIELD_SECTION in selected_fields:
+            if getattr(metadata, 'categories', None):
+                section = metadata.categories[0] or ''
+                if section:
+                    self.podcast_section_entry.set_text(section)
 
-        if metadata.categories:
-            # Optional. This is a reasonable default, but you may prefer always using "Other".
-            self.podcast_section_entry.set_text(metadata.categories[0] or _('Other'))
+        if ManualPodcastMetadataApplyDialog.FIELD_DESCRIPTION in selected_fields:
+            if metadata.description:
+                buf = self.podcast_description.get_buffer()
+                buf.set_text(metadata.description)
 
-        if metadata.image_url:
-            self.metadata_image_url = metadata.image_url
+    def choose_and_apply_podcast_metadata(self, metadata):
+        current_values = self.get_current_metadata_values()
+
+        dialog = ManualPodcastMetadataApplyDialog(
+            self,
+            metadata,
+            current_values=current_values,
+            is_edit=self.is_edit,
+        )
+
+        try:
+            response = dialog.run()
+            if response != Gtk.ResponseType.OK:
+                return
+
+            selected_fields = dialog.get_selected_fields()
+            if not selected_fields:
+                return
+
+        finally:
+            dialog.destroy()
+
+        self.apply_metadata(metadata, selected_fields)
+
+    def enrich_selected_podcast_metadata(self, metadata):
+        """Try to replace search-result metadata with fuller feed/provider metadata."""
+
+        feed_url = getattr(metadata, 'feed_url', None)
+        if not feed_url:
+            return metadata
+
+        try:
+            service = podcastmetadata.create_metadata_service(self.config, include_rss=True)
+
+            fuller_metadata = service.lookup_by_feed_url(feed_url)
+            if fuller_metadata is not None:
+                logger.info(
+                    'Enriched podcast metadata from feed URL: source=%s old_desc_len=%d new_desc_len=%d',
+                    getattr(fuller_metadata, 'source', None),
+                    len(getattr(metadata, 'description', '') or ''),
+                    len(getattr(fuller_metadata, 'description', '') or ''),
+                )
+                return fuller_metadata
+
+        except Exception:
+            logger.warning('Could not enrich selected podcast metadata', exc_info=True)
+
+        return metadata
+
+    def get_current_metadata_values(self):
+        buf = self.podcast_description.get_buffer()
+
+        return {
+            'title': self.podcast_title_entry.get_text().strip(),
+            'feed_url': self.podcast_feed_url_entry.get_text().strip(),
+            'website_url': self.podcast_website_link_entry.get_text().strip(),
+            'cover_url': self.podcast_cover_url_entry.get_text().strip(),
+            'section': self.podcast_section_entry.get_text().strip(),
+            'description': buf.get_text(
+                buf.get_start_iter(),
+                buf.get_end_iter(),
+                True,
+            ).strip(),
+        }
 
     def get_data(self):
         buf = self.podcast_description.get_buffer()
+
         return {
             'title': self.podcast_title_entry.get_text().strip(),
             'url': self.podcast_feed_url_entry.get_text().strip(),
             'link': self.podcast_website_link_entry.get_text().strip(),
+            'cover_url': self.podcast_cover_url_entry.get_text().strip(),
             'section': self.podcast_section_entry.get_text().strip() or _('Other'),
-            'description': buf.get_text(buf.get_start_iter(), buf.get_end_iter(), True).strip(),
-            'cover_url': self.metadata_image_url,
+            'description': buf.get_text(
+                buf.get_start_iter(),
+                buf.get_end_iter(),
+                True,
+            ).strip(),
         }
 
 
-class ManualEpisodeDialog(Gtk.Dialog):
-    def __init__(self, parent, podcasts, active_podcast=None, episode=None):
-        self.episode = episode
-        is_edit = episode is not None
+class ManualEpisodeMetadataSearchDialog(Gtk.Dialog):
+    """Search online metadata for episodes belonging to the selected podcast."""
+
+    COL_TITLE = 0
+    COL_PUBLISHED = 1
+    COL_SOURCE = 2
+    COL_DESCRIPTION = 3
+    COL_OBJECT = 4
+
+    def __init__(self, parent, config, podcast, initial_query=''):
         super().__init__(
-            title=_('Edit selected episode') if is_edit else _('Add episode manually'),
+            title=_('Find episode metadata online'),
+            transient_for=parent,
+            modal=True,
+        )
+
+        self.config = config
+        self.podcast = podcast
+        self.selected_episode = None
+
+        self.add_buttons(
+            _('_Cancel'), Gtk.ResponseType.CANCEL,
+            _('_Use Selected'), Gtk.ResponseType.OK,
+        )
+        self.set_default_response(Gtk.ResponseType.OK)
+        self.set_border_width(12)
+        self.set_default_size(1050, 700)
+
+        area = self.get_content_area()
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        outer.set_hexpand(True)
+        outer.set_vexpand(True)
+        area.add(outer)
+
+        podcast_title = getattr(podcast, 'title', '') or getattr(podcast, 'url', '')
+        info = Gtk.Label(
+            label=_('Search episodes for: %s') % podcast_title,
+            xalign=0,
+        )
+        info.set_line_wrap(True)
+        outer.pack_start(info, False, False, 0)
+
+        search_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        outer.pack_start(search_row, False, False, 0)
+
+        self.search_entry = Gtk.Entry()
+        self.search_entry.set_hexpand(True)
+        self.search_entry.set_placeholder_text(_('Optional episode title keyword'))
+        self.search_entry.set_text(initial_query or '')
+        search_row.pack_start(self.search_entry, True, True, 0)
+
+        self.search_button = Gtk.Button.new_with_label(_('Search'))
+        self.search_button.connect('clicked', self.on_search_episodes_clicked)
+        search_row.pack_start(self.search_button, False, False, 0)
+
+        self.status_label = Gtk.Label(label='', xalign=0)
+        outer.pack_start(self.status_label, False, False, 0)
+
+        self.store = Gtk.ListStore(str, str, str, str, object)
+
+        self.tree = Gtk.TreeView(model=self.store)
+        self.tree.set_headers_visible(True)
+
+        for title, column_id, width in (
+            (_('Title'), self.COL_TITLE, 360),
+            (_('Published'), self.COL_PUBLISHED, 140),
+            (_('Source'), self.COL_SOURCE, 140),
+        ):
+            renderer = Gtk.CellRendererText()
+            renderer.set_property('ellipsize', 3)
+            column = Gtk.TreeViewColumn(title, renderer, text=column_id)
+            column.set_resizable(True)
+            column.set_min_width(width)
+            self.tree.append_column(column)
+
+        selection = self.tree.get_selection()
+        selection.set_mode(Gtk.SelectionMode.SINGLE)
+        selection.connect('changed', self.on_selection_changed)
+
+        self.tree.connect('row-activated', self.on_row_activated)
+
+        sw = Gtk.ScrolledWindow()
+        sw.set_hexpand(True)
+        sw.set_vexpand(True)
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        sw.add(self.tree)
+        outer.pack_start(sw, True, True, 0)
+
+        self.description = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD)
+        self.description.set_editable(False)
+        self.description.set_cursor_visible(False)
+
+        desc_sw = Gtk.ScrolledWindow()
+        desc_sw.set_hexpand(True)
+        desc_sw.set_vexpand(False)
+        desc_sw.set_min_content_height(120)
+        desc_sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        desc_sw.add(self.description)
+        outer.pack_start(desc_sw, False, True, 0)
+
+        self.show_all()
+
+        GLib.idle_add(self.on_search_episodes_clicked, self.search_button)
+
+    def on_search_episodes_clicked(self, button):
+        query = self.search_entry.get_text().strip().lower()
+
+        self.store.clear()
+        self.selected_episode = None
+        self._set_description('')
+        self.status_label.set_text(_('Searching...'))
+
+        while Gtk.events_pending():
+            Gtk.main_iteration_do(False)
+
+        try:
+            episodes = self._search_episode_metadata(query)
+        except Exception as exc:
+            logger.warning('Episode metadata search failed', exc_info=True)
+            self.status_label.set_text(_('Search failed: %s') % str(exc))
+            return
+
+        for episode in episodes:
+            self.store.append([
+                episode.title or '',
+                self._format_published(episode.published),
+                episode.source or '',
+                episode.description or '',
+                episode,
+            ])
+
+        if episodes:
+            self.status_label.set_text(
+                _('Found %(count)d episode result(s). Select one and click Use Selected.') %
+                {'count': len(episodes)}
+            )
+        else:
+            self.status_label.set_text(_('No matching episodes were found.'))
+
+    def _search_episode_metadata(self, query):
+        logger.info(
+            'Episode metadata search: podcast=%r feed_url=%r query=%r',
+            getattr(self.podcast, 'title', None),
+            getattr(self.podcast, 'url', None),
+            query,
+        )
+
+        service = podcastmetadata.create_metadata_service(self.config, include_rss=False)
+        feed_url = getattr(self.podcast, 'url', '') or ''
+        metadata_podcast = None
+
+        if feed_url and not feed_url.startswith('manual://'):
+            metadata_podcast = service.lookup_by_feed_url(feed_url)
+            logger.info(
+                'Episode metadata podcast lookup result: title=%r source=%r source_id=%r',
+                getattr(metadata_podcast, 'title', None),
+                getattr(metadata_podcast, 'source', None),
+                getattr(metadata_podcast, 'source_id', None),
+            )
+        else:
+            logger.warning('Skipping episode metadata lookup - no URL feed or manual URL feed')
+
+        # If lookup-by-feed-url failed, search by podcast title and use the first plausible result.
+        if metadata_podcast is None:
+            podcast_title = getattr(self.podcast, 'title', '') or ''
+            podcast_matches = service.search_podcasts_from_all_providers(
+                podcast_title,
+                limit_per_provider=10,
+                dedupe_across_sources=False,
+            )
+            if podcast_matches:
+                metadata_podcast = podcast_matches[0]
+
+        if metadata_podcast is None:
+            return []
+
+        episodes = service.get_episodes_from_all_providers(
+            metadata_podcast,
+            limit=100,
+        )
+
+        episodes = service.apply_rss_description_fallback(
+            metadata_podcast,
+            episodes,
+            limit=100,
+        )
+
+        if query:
+            episodes = [
+                episode for episode in episodes
+                if query in ((episode.title or '').lower())
+                or query in ((episode.description or '').lower())
+            ]
+
+        # Log the sources of the returned episode metadata to help troubleshoot
+        # where metadata is coming from and how well the RSS fallback is working.
+        source_counts = {}
+        for episode in episodes:
+            source = getattr(episode, 'source', None) or '(unknown)'
+            source_counts[source] = source_counts.get(source, 0) + 1
+
+        logger.info(
+            'Episode metadata search returned %d episode(s) after RSS description fallback',
+            len(episodes)
+        )
+        logger.info(
+            'Combined episode metadata results by source: %s', source_counts
+        )
+
+        return episodes
+
+    def _format_published(self, published):
+        if not published:
+            return ''
+
+        try:
+            if isinstance(published, int):
+                return _dt.datetime.fromtimestamp(published).strftime('%Y-%m-%d')
+            if isinstance(published, str):
+                return published[:10]
+        except Exception:
+            pass
+
+        return str(published)
+
+    def on_selection_changed(self, selection):
+        model, tree_iter = selection.get_selected()
+        if tree_iter is None:
+            self.selected_episode = None
+            self._set_description('')
+            return
+
+        self.selected_episode = model[tree_iter][self.COL_OBJECT]
+        self._set_description(model[tree_iter][self.COL_DESCRIPTION] or '')
+
+    def on_row_activated(self, tree, path, column):
+        selection = tree.get_selection()
+        self.on_selection_changed(selection)
+        self.response(Gtk.ResponseType.OK)
+
+    def _set_description(self, text):
+        buf = self.description.get_buffer()
+        buf.set_text(text or '')
+
+    def get_selected_episode(self):
+        return self.selected_episode
+
+
+class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
+    """Choose the metadata fields to copy into the manual episode add/edit dialog."""
+
+    FIELD_TITLE = 'title'
+    FIELD_MEDIA_URL = 'media_url'
+    FIELD_LINK = 'link'
+    FIELD_DESCRIPTION = 'description'
+    FIELD_PUBLISHED = 'published'
+    FIELD_SEASON = 'season'
+    FIELD_EPISODE = 'episode'
+    FIELD_GUID = 'guid'
+    FIELD_EPISODE_ART_URL = 'episode_art_url'
+    FIELD_DURATION = 'duration'
+
+    def __init__(self, parent, metadata, current_values=None, is_edit=False):
+        super().__init__(
+            title=_('Apply episode metadata'),
+            transient_for=parent,
+            modal=True,
+        )
+
+        self.metadata = metadata
+        self.current_values = current_values or {}
+        self.is_edit = is_edit
+        self.checkboxes = {}
+
+        self.add_buttons(
+            _('_Cancel'), Gtk.ResponseType.CANCEL,
+            _('_Apply Selected'), Gtk.ResponseType.OK,
+        )
+
+        self.set_default_response(Gtk.ResponseType.OK)
+        self.set_border_width(12)
+        self.set_default_size(1050, 700)
+
+        area = self.get_content_area()
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        outer.set_hexpand(True)
+        outer.set_vexpand(True)
+        area.add(outer)
+
+        note = Gtk.Label(
+            label=_('Select the episode metadata fields to copy into the episode dialog.'),
+            xalign=0,
+        )
+        outer.pack_start(note, False, False, 0)
+
+        # Place the row grid inside a ScrolledWindow in case there are many fields or the description is long.
+        grid = Gtk.Grid(column_spacing=DEFAULT_COL_SPACING, row_spacing=DEFAULT_ROW_SPACING,
+                        margin=DEFAULT_MARGIN)  # Was: 14, 10, undefined
+        grid.set_hexpand(True)
+        grid.set_vexpand(True)
+        grid.set_column_homogeneous(False)
+
+        grid_sw = Gtk.ScrolledWindow()
+        grid_sw.set_hexpand(True)
+        grid_sw.set_vexpand(True)
+        grid_sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        grid_sw.add(grid)
+        outer.pack_start(grid_sw, True, True, 0)
+
+        # Format the grid with 4 columns: checkbox, field name, current value, online value.
+        # Use CSS style classes to visually differentiate current vs online values.
+        grid.attach(self._make_header_label(_('Use')), 0, 0, 1, 1)
+        grid.attach(self._make_header_label(_('Field')), 1, 0, 1, 1)
+        grid.attach(self._make_header_label(_('Current value')), 2, 0, 1, 1)
+        grid.attach(self._make_header_label(_('Online value')), 3, 0, 1, 1)
+
+        rows = [
+            (self.FIELD_TITLE, _('Title'), current_values.get('title', ''), metadata.title or '', True),
+            (self.FIELD_MEDIA_URL, _('Media URL'), current_values.get('media_url', ''), metadata.url or '', not is_edit),
+            (self.FIELD_LINK, _('Episode page link'), current_values.get('link', ''), metadata.link or '', True),
+            (self.FIELD_DESCRIPTION, _('Description'), current_values.get('description', ''), metadata.description or '', True),
+            (self.FIELD_PUBLISHED, _('Published'), current_values.get('published', ''), self._format_published(metadata.published), True),
+            (self.FIELD_SEASON, _('Season'), current_values.get('season', ''), self._value(metadata.season), True),
+            (self.FIELD_EPISODE, _('Episode #'), current_values.get('episode', ''), self._value(metadata.number), True),
+            (self.FIELD_GUID, _('GUID'), current_values.get('guid', ''), metadata.guid or '', False),
+            (self.FIELD_EPISODE_ART_URL, _('Episode Art URL'), current_values.get('episode_art_url', ''), metadata.image_url or '', True),
+            (self.FIELD_DURATION, _('Duration'), current_values.get('duration', ''), self._value(metadata.duration), True),
+        ]
+
+        row_num = 1
+
+        # Loop to create a row for each metadata field with a checkbox, field label,
+        # current value, and online value.
+        for field_name, label, current_value, online_value, default_checked in rows:
+            has_online_value = bool((online_value or '').strip())
+
+            checkbox = Gtk.CheckButton()
+            checkbox.set_active(default_checked and has_online_value)
+            checkbox.set_sensitive(has_online_value)
+            self.checkboxes[field_name] = checkbox
+
+            # Format field within an EventBox to highlight them.
+            field_label = Gtk.Label()
+            field_label.set_markup('<b>%s</b>' % html.escape(label))
+            field_label.set_xalign(0)
+
+            # Put current and online values in an EventBox to get a visible background.
+            # The description field gets a multi-line TextView inside a ScrolledWindow,
+            # while other fields get a single-line Label. Both use CSS classes to
+            # visually differentiate current vs online values.
+            if field_name == self.FIELD_DESCRIPTION:
+                current_box = self._make_description_box(
+                    current_value,
+                    'metadata-current-value',
+                )
+                online_box = self._make_description_box(
+                    online_value,
+                    'metadata-online-value',
+                )
+            else:
+                current_box = self._make_value_box(
+                    current_value,
+                    'metadata-current-value',
+                )
+                online_box = self._make_value_box(
+                    online_value,
+                    'metadata-online-value',
+                )
+
+            grid.attach(checkbox, 0, row_num, 1, 1)
+            grid.attach(field_label, 1, row_num, 1, 1)
+            grid.attach(current_box, 2, row_num, 1, 1)
+            grid.attach(online_box, 3, row_num, 1, 1)
+
+            row_num += 1
+
+        self.show_all()
+
+    def _value(self, value):
+        if value is None:
+            return ''
+        return str(value)
+
+    def _format_published(self, published):
+        if not published:
+            return ''
+
+        try:
+            if isinstance(published, int):
+                return _dt.datetime.fromtimestamp(published).strftime('%Y-%m-%d %H:%M')
+            if isinstance(published, str):
+                return published[:16].replace('T', ' ')
+        except Exception:
+            pass
+
+        return str(published)
+
+    def _shorten(self, value, max_len=180):
+        value = (value or '').strip().replace('\r', ' ').replace('\n', ' ')
+        if len(value) > max_len:
+            return value[:max_len - 3] + '...'
+        return value
+
+    def get_selected_fields(self):
+        return {
+            field_name
+            for field_name, checkbox in self.checkboxes.items()
+            if checkbox.get_active()
+        }
+
+    def _make_header_label(self, text):
+        label = Gtk.Label(label=text, xalign=0)
+        label.get_style_context().add_class('metadata-apply-header')
+        return label
+
+    def _make_value_box(self, text, css_class):
+        label = Gtk.Label(label=self._shorten(text), xalign=0)
+        label.set_line_wrap(True)
+        label.set_selectable(True)
+        label.set_tooltip_text(text or '')
+
+        # EventBox lets GTK apply a visible background around the label.
+        box = Gtk.EventBox()
+        box.set_visible_window(True)
+        box.set_hexpand(True)
+        box.get_style_context().add_class(css_class)
+        box.add(label)
+
+        return box
+
+    def _make_description_box(self, text, css_class):
+        text = text or ''
+
+        textview = Gtk.TextView()
+        textview.set_wrap_mode(Gtk.WrapMode.WORD)
+        textview.set_editable(False)
+        textview.set_cursor_visible(False)
+        textview.set_hexpand(True)
+        textview.set_vexpand(True)
+
+        buf = textview.get_buffer()
+        buf.set_text(text)
+
+        # Apply the same visual styling class to the TextView.
+        textview.get_style_context().add_class(css_class)
+
+        sw = Gtk.ScrolledWindow()
+        sw.set_hexpand(True)
+        sw.set_vexpand(True)
+        sw.set_min_content_height(140)
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        sw.add(textview)
+
+        # Also apply styling to the scrolled window so the box stands out.
+        sw.get_style_context().add_class(css_class)
+
+        return sw
+
+
+class ManualEpisodeDialog(Gtk.Dialog):
+    def __init__(self, parent, config, podcasts, active_podcast=None, episode=None):
+        self.config = config
+        self.episode = episode
+        self.is_edit = episode is not None
+
+        super().__init__(
+            title=_('Edit selected episode') if self.is_edit else _('Add episode manually'),
             transient_for=parent,
             modal=True,
         )
         self.add_buttons(
             _('_Cancel'), Gtk.ResponseType.CANCEL,
-            _('_Save') if is_edit else _('_Add'), Gtk.ResponseType.OK,
+            _('_Save') if self.is_edit else _('_Add'), Gtk.ResponseType.OK,
         )
         self.set_default_response(Gtk.ResponseType.OK)
         self.set_border_width(12)
@@ -610,7 +1383,8 @@ class ManualEpisodeDialog(Gtk.Dialog):
         area.set_hexpand(True)
         area.set_vexpand(True)
 
-        grid = Gtk.Grid(column_spacing=12, row_spacing=8, margin=12)
+        grid = Gtk.Grid(column_spacing=DEFAULT_COL_SPACING, row_spacing=DEFAULT_ROW_SPACING,
+                        margin=DEFAULT_MARGIN)  # Was: 12, 8, 12
         grid.set_hexpand(True)
         grid.set_vexpand(True)
         area.add(grid)
@@ -628,12 +1402,23 @@ class ManualEpisodeDialog(Gtk.Dialog):
         self.entry_title = Gtk.Entry()
         self.entry_title.set_activates_default(True)
 
+        self.find_episode_metadata_button = Gtk.Button.new_with_label(_('Find online...'))
+        self.find_episode_metadata_button.set_tooltip_text(
+            _('Search online metadata providers for episodes from the selected podcast.')
+        )
+        self.find_episode_metadata_button.connect('clicked', self.on_find_episode_metadata_clicked)
+
+        title_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        title_box.set_hexpand(True)
+        title_box.pack_start(self.entry_title, True, True, 0)
+        title_box.pack_start(self.find_episode_metadata_button, False, False, 0)
+
         self.file_media = Gtk.FileChooserButton.new(_('Select media file'), Gtk.FileChooserAction.OPEN)
         self.file_media.set_hexpand(True)
         self.file_media.connect('selection-changed', self.on_media_file_selected)
 
         self.media_help_label = Gtk.Label(
-            label=_('Select a media file first so the title, description, and published date fields can be populated.'),
+            label=_('<Select a media file first so the title, description, and published date fields can be populated.>'),
             xalign=0,
         )
         self.media_help_label.set_line_wrap(True)
@@ -641,10 +1426,22 @@ class ManualEpisodeDialog(Gtk.Dialog):
 
         self.entry_link = Gtk.Entry()
         self.entry_link.set_placeholder_text('https://example.com/episode-page')
+
         self.entry_guid = Gtk.Entry()
         self.entry_guid.set_placeholder_text(_('Leave blank to auto-generate'))
+
+        self.entry_media_url = Gtk.Entry()
+        self.entry_media_url.set_placeholder_text(_('Online media/enclosure URL'))
+
+        self.entry_episode_art_url = Gtk.Entry()
+        self.entry_episode_art_url.set_placeholder_text(_('Episode artwork URL'))
+
+        self.spin_duration = Gtk.SpinButton.new_with_range(0, 999999, 1)
+        self.spin_duration.set_tooltip_text(_('Episode duration in seconds'))
+
         self.entry_published = Gtk.Entry()
         self.entry_published.set_text(_dt.datetime.now().strftime('%Y-%m-%d %H:%M'))
+
         self.spin_season_num = Gtk.SpinButton.new_with_range(0, 9999, 1)
         self.spin_episode_num = Gtk.SpinButton.new_with_range(0, 9999, 1)
 
@@ -656,7 +1453,7 @@ class ManualEpisodeDialog(Gtk.Dialog):
             _('Save the description field as HTML instead of plain text.')
         )
         self.check_replace_media = Gtk.CheckButton.new_with_label(_('Replace media file from selected source'))
-        self.check_replace_media.set_active(not is_edit)
+        self.check_replace_media.set_active(not self.is_edit)
 
         self.text_description = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD)
         self.text_description.set_hexpand(True)
@@ -685,7 +1482,7 @@ class ManualEpisodeDialog(Gtk.Dialog):
         grid.attach(self.file_media, 1, row, 1, 1)
         row += 1
 
-        if is_edit:
+        if self.is_edit:
             grid.attach(Gtk.Label(label=_('Current media file'), xalign=0), 0, row, 1, 1)
             curr_file = Gtk.Label(
                 label=_('{}').format(getattr(episode, 'download_filename', '') or _('(none)')),
@@ -698,10 +1495,13 @@ class ManualEpisodeDialog(Gtk.Dialog):
 
         # Add remaining data fields.
         fields = [
-            (_('Episode title'), self.entry_title),
+            (_('Episode title'), title_box),
             (_('Description'), desc_sw),
             (_('Published'), self.entry_published),
             (_('Episode page link'), self.entry_link),
+            (_('Media URL'), self.entry_media_url),
+            (_('Episode Art URL'), self.entry_episode_art_url),
+            (_('Duration seconds'), self.spin_duration),
             (_('Season'), self.spin_season_num),
             (_('Episode #'), self.spin_episode_num),
             (_('GUID override'), self.entry_guid),
@@ -732,6 +1532,9 @@ class ManualEpisodeDialog(Gtk.Dialog):
                     _dt.datetime.fromtimestamp(int(episode.published)).strftime('%Y-%m-%d %H:%M')
                 )
             self.entry_link.set_text(episode.link or '')
+            self.entry_media_url.set_text(episode.url or '')
+            self.entry_episode_art_url.set_text(getattr(episode, 'episode_art_url', None) or '')
+            self.spin_duration.set_value(int(getattr(episode, 'total_time', 0) or 0))
             self.entry_guid.set_text(episode.guid or '')
             self.spin_season_num.set_value(int(getattr(episode, 'season_num', 0) or 0))
             self.spin_episode_num.set_value(int(getattr(episode, 'episode_num', 0) or 0))
@@ -747,6 +1550,143 @@ class ManualEpisodeDialog(Gtk.Dialog):
     def get_selected_podcast(self):
         idx = self.combo_podcast.get_active()
         return None if idx < 0 else self._podcasts[idx]
+
+    def on_find_episode_metadata_clicked(self, button):
+        podcast = self.get_selected_podcast()
+        if podcast is None:
+            return
+
+        query = self.entry_title.get_text().strip()
+
+        dialog = ManualEpisodeMetadataSearchDialog(
+            self,
+            self.config,
+            podcast,
+            initial_query=query,
+        )
+
+        try:
+            response = dialog.run()
+            if response != Gtk.ResponseType.OK:
+                return
+
+            metadata = dialog.get_selected_episode()
+            if metadata is None:
+                return
+
+        finally:
+            dialog.destroy()
+
+        self.choose_and_apply_episode_metadata(metadata)
+
+
+    def choose_and_apply_episode_metadata(self, metadata):
+        current_values = self.get_current_episode_metadata_values()
+
+        dialog = ManualEpisodeMetadataApplyDialog(
+            self,
+            metadata,
+            current_values=current_values,
+            is_edit=self.is_edit,
+        )
+
+        try:
+            response = dialog.run()
+            if response != Gtk.ResponseType.OK:
+                return
+
+            selected_fields = dialog.get_selected_fields()
+            if not selected_fields:
+                return
+
+        finally:
+            dialog.destroy()
+
+        self.apply_episode_metadata(metadata, selected_fields)
+
+    def get_current_episode_metadata_values(self):
+        buf = self.text_description.get_buffer()
+
+        return {
+            'title': self.entry_title.get_text().strip(),
+            'media_url': self.entry_media_url.get_text().strip(),
+            'link': self.entry_link.get_text().strip(),
+            'published': self.entry_published.get_text().strip(),
+            'season': str(int(self.spin_season_num.get_value())),
+            'episode': str(int(self.spin_episode_num.get_value())),
+            'guid': self.entry_guid.get_text().strip(),
+            'episode_art_url': self.entry_episode_art_url.get_text().strip(),
+            'duration': str(int(self.spin_duration.get_value())),
+            'description': buf.get_text(
+                buf.get_start_iter(),
+                buf.get_end_iter(),
+                True,
+            ).strip(),
+        }
+
+    def apply_episode_metadata(self, metadata, selected_fields):
+        if ManualEpisodeMetadataApplyDialog.FIELD_TITLE in selected_fields:
+            if metadata.title:
+                self.entry_title.set_text(metadata.title)
+
+        if ManualEpisodeMetadataApplyDialog.FIELD_MEDIA_URL in selected_fields:
+            if metadata.url:
+                self.entry_media_url.set_text(metadata.url)
+
+        if ManualEpisodeMetadataApplyDialog.FIELD_LINK in selected_fields:
+            if metadata.link:
+                self.entry_link.set_text(metadata.link)
+
+        if ManualEpisodeMetadataApplyDialog.FIELD_DESCRIPTION in selected_fields:
+            if metadata.description:
+                buf = self.text_description.get_buffer()
+                buf.set_text(metadata.description)
+
+                # Most online metadata descriptions are HTML-ish.
+                self.check_description_html.set_active(True)
+
+        if ManualEpisodeMetadataApplyDialog.FIELD_PUBLISHED in selected_fields:
+            published_text = self._metadata_published_to_text(metadata.published)
+            if published_text:
+                self.entry_published.set_text(published_text)
+
+        if ManualEpisodeMetadataApplyDialog.FIELD_SEASON in selected_fields:
+            if metadata.season is not None:
+                self.spin_season_num.set_value(int(metadata.season or 0))
+
+        if ManualEpisodeMetadataApplyDialog.FIELD_EPISODE in selected_fields:
+            if metadata.number is not None:
+                self.spin_episode_num.set_value(int(metadata.number or 0))
+
+        if ManualEpisodeMetadataApplyDialog.FIELD_GUID in selected_fields:
+            if metadata.guid:
+                self.entry_guid.set_text(metadata.guid)
+
+        if ManualEpisodeMetadataApplyDialog.FIELD_EPISODE_ART_URL in selected_fields:
+            if metadata.image_url:
+                self.entry_episode_art_url.set_text(metadata.image_url)
+
+        if ManualEpisodeMetadataApplyDialog.FIELD_DURATION in selected_fields:
+            if metadata.duration:
+                self.spin_duration.set_value(int(metadata.duration or 0))
+
+    def _metadata_published_to_text(self, published):
+        if not published:
+            return ''
+
+        try:
+            if isinstance(published, int):
+                return _dt.datetime.fromtimestamp(published).strftime('%Y-%m-%d %H:%M')
+
+            if isinstance(published, str):
+                text = published.strip()
+                text = text.replace('T', ' ')
+                text = text.replace('Z', '')
+                return text[:16]
+        except Exception:
+            logger.warning('Could not convert metadata published value: %r', published, exc_info=True)
+
+        return str(published)
 
     def on_media_file_selected(self, chooser):
         filename = chooser.get_filename()
@@ -771,19 +1711,27 @@ class ManualEpisodeDialog(Gtk.Dialog):
 
     def get_data(self):
         buf = self.text_description.get_buffer()
+
         return {
             'podcast': self.get_selected_podcast(),
             'title': self.entry_title.get_text().strip(),
             'media_file': self.file_media.get_filename(),
+            'media_url': self.entry_media_url.get_text().strip(),
             'replace_media': self.check_replace_media.get_active(),
             'published_text': self.entry_published.get_text().strip(),
             'link': self.entry_link.get_text().strip(),
             'guid': self.entry_guid.get_text().strip(),
-            'season_num': self.spin_season_num.get_value_as_int(),
-            'episode_num': self.spin_episode_num.get_value_as_int(),
+            'season_num': int(self.spin_season_num.get_value()),
+            'episode_num': int(self.spin_episode_num.get_value()),
             'is_new': self.check_mark_new.get_active(),
-            'description': buf.get_text(buf.get_start_iter(), buf.get_end_iter(), True).strip(),
+            'description': buf.get_text(
+                buf.get_start_iter(),
+                buf.get_end_iter(),
+                True,
+            ).strip(),
             'description_is_html': self.check_description_html.get_active(),
+            'episode_art_url': self.entry_episode_art_url.get_text().strip(),
+            'total_time': int(self.spin_duration.get_value()),
         }
 
 
@@ -800,12 +1748,13 @@ class ManualBatchEpisodeDialog(Gtk.Dialog):
         )
         self.set_default_response(Gtk.ResponseType.OK)
         self.set_border_width(12)
-        self.set_default_size(720, 420)
+        self.set_default_size(760, 680)
 
         self._podcasts = list(podcasts)
 
         area = self.get_content_area()
-        grid = Gtk.Grid(column_spacing=12, row_spacing=8, margin=12)
+        grid = Gtk.Grid(column_spacing=DEFAULT_COL_SPACING, row_spacing=DEFAULT_ROW_SPACING,
+                        margin=DEFAULT_MARGIN)  # Was: 12, 8, 12
         area.add(grid)
 
         self.combo_podcast = Gtk.ComboBoxText()
@@ -1123,7 +2072,14 @@ class ManualEntryController(object):
             return
 
         active = getattr(self.ui, 'active_channel', None)
-        dialog = ManualEpisodeDialog(self.ui.main_window, podcasts, active_podcast=active)
+
+        dialog = ManualEpisodeDialog(
+            self.ui.main_window,
+            self.ui.config,
+            podcasts,
+            active_podcast=active,
+        )
+
         try:
             response = dialog.run()
             if response == Gtk.ResponseType.OK:
@@ -1176,7 +2132,14 @@ class ManualEntryController(object):
             return
 
         podcasts = list(self.ui.model.get_podcasts())
-        dialog = ManualEpisodeDialog(self.ui.main_window, podcasts, episode=episode)
+
+        dialog = ManualEpisodeDialog(
+            self.ui.main_window,
+            self.ui.config,
+            podcasts,
+            episode=episode,
+        )
+
         try:
             response = dialog.run()
             if response == Gtk.ResponseType.OK:
@@ -1187,7 +2150,7 @@ class ManualEntryController(object):
         finally:
             dialog.destroy()
 
-    def create_manual_podcast(self, title, url, description='', link='', section='', cover_url=None):
+    def create_manual_podcast(self, title, url, description='', link='', cover_url='', section=''):
         """Create a new podcast with the provided data from the add dialog."""
 
         # Verify a title was specified.
@@ -1225,7 +2188,7 @@ class ManualEntryController(object):
         podcast.title = title
         podcast.link = link.strip()
         podcast.description = description.strip()
-        podcast.cover_url = cover_url
+        podcast.cover_url = (cover_url or '').strip() or None
         podcast.payment_url = None
         podcast.section = (section or '').strip() or _('Other')
         podcast.download_folder = None
@@ -1236,7 +2199,7 @@ class ManualEntryController(object):
 
         return podcast
 
-    def update_manual_podcast(self, podcast, title, url, link='', section='', description='', cover_url=None):
+    def update_manual_podcast(self, podcast, title, url, link='', cover_url='', section='', description=''):
         """Update the selected podcast with the provided data from the edit dialog."""
 
         title = (title or '').strip()
@@ -1302,8 +2265,12 @@ class ManualEntryController(object):
         podcast.link = link.strip()
         podcast.description = description.strip()
         podcast.section = (section or '').strip() or _('Other')
-        if cover_url:
-            podcast.cover_url = cover_url
+
+        old_cover_url = getattr(podcast, 'cover_url', None)
+        new_cover_url = (cover_url or '').strip() or None
+        if new_cover_url != old_cover_url:
+            podcast.cover_url = new_cover_url
+
         podcast.save()
         self.ui.db.commit()  #RobL
 
@@ -1318,18 +2285,28 @@ class ManualEntryController(object):
     def add_manual_episode(self, podcast, title, media_file, published_text,
                            link='', guid='', season_num=0, episode_num=0,
                            is_new=True, description='', description_is_html=False,
-                           replace_media=True):
+                           replace_media=True, media_url='', episode_art_url='',
+                           total_time=0):
         if podcast is None:
             raise ManualEntryError(_('A podcast must be selected.'))
 
-        if not media_file:
-            raise ManualEntryError(_('A media file must be selected.'))
+        media_url = (media_url or '').strip()
+        if not media_file and not media_url:
+            raise ManualEntryError(_('A media file or online media URL is required.'))
 
-        source = pathlib.Path(media_file).expanduser().resolve()
-        if not source.exists() or not source.is_file():
-            raise ManualEntryError(_('Selected media file was not found.'))
+        source = None
+        metadata = {
+            'title': '',
+            'description': '',
+            'published': int(time.time()),
+        }
 
-        metadata = _extract_media_metadata(source)
+        if media_file:
+            source = pathlib.Path(media_file).expanduser().resolve()
+            if not source.exists() or not source.is_file():
+                raise ManualEntryError(_('Selected media file was not found.'))
+
+            metadata = _extract_media_metadata(source)
 
         title = (title or '').strip() or metadata['title']
         if not title:
@@ -1356,7 +2333,10 @@ class ManualEntryController(object):
             description=description,
             description_is_html=description_is_html,
             media_source=source,
-            replace_media=True,
+            media_url=media_url,
+            episode_art_url=episode_art_url,
+            total_time=total_time,
+            replace_media=bool(source),
             is_new_record=True,
         )
 
@@ -1438,7 +2418,8 @@ class ManualEntryController(object):
 
     def update_manual_episode(self, episode, podcast, title, media_file, replace_media,
                               published_text, link='', guid='', season_num=0, episode_num=0,
-                              is_new=True, description='', description_is_html=False):
+                              is_new=True, description='', description_is_html=False,
+                              media_url='', episode_art_url='', total_time=0):
         if podcast is None:
             raise ManualEntryError(_('A podcast must be selected.'))
 
@@ -1476,6 +2457,9 @@ class ManualEntryController(object):
             description=description,
             description_is_html=description_is_html,
             media_source=source,
+            media_url=media_url,
+            episode_art_url=episode_art_url,
+            total_time=total_time,
             replace_media=bool(replace_media),
             is_new_record=False,
         )
@@ -1494,13 +2478,21 @@ class ManualEntryController(object):
     def _apply_episode_fields(self, episode, podcast, title, published, link, guid,
                               season_num, episode_num, is_new, description,
                               description_is_html=False,
-                              media_source=None, replace_media=False,
+                              media_source=None, media_url='', episode_art_url='',
+                              total_time=0, replace_media=False,
                               is_new_record=False):
         old_destination = None
         if getattr(episode, 'download_filename', None):
             old_destination = episode.local_filename(create=False, check_only=True)
 
         episode.title = title
+
+        episode_art_url = (episode_art_url or '').strip()
+        if hasattr(episode, 'episode_art_url'):
+            episode.episode_art_url = episode_art_url or None
+
+        if total_time:
+            episode.total_time = int(total_time or 0)
 
         description = (description or '').strip()
         if description_is_html:
@@ -1514,15 +2506,23 @@ class ManualEntryController(object):
             episode.cache_text_description()
 
         episode.guid = guid.strip() or episode.guid or self._build_manual_episode_guid(podcast, title)
-        episode.link = link.strip() or (media_source.as_uri() if media_source is not None else episode.link)
         episode.published = published
         episode.payment_url = None
-        episode.total_time = getattr(episode, 'total_time', 0) or 0
         episode.current_position = 0
         episode.current_position_updated = 0
         episode.last_playback = 0 if is_new else int(time.time())
+
+        media_url = (media_url or '').strip()
+        episode.link = link.strip() or (
+            media_source.as_uri() if media_source is not None else episode.link
+        )
+
+        if not total_time:
+            episode.total_time = getattr(episode, 'total_time', 0) or 0
+
         if hasattr(episode, 'season_num'):
             episode.season_num = int(season_num or 0)
+
         if hasattr(episode, 'episode_num'):
             episode.episode_num = int(episode_num or 0)
 
@@ -1541,18 +2541,29 @@ class ManualEntryController(object):
                 except OSError:
                     pass
         else:
-            if replace_media:
-                raise ManualEntryError(_('A replacement media file is required.'))
-            # Re-run naming logic if metadata changed and a managed file exists.
-            if old_destination and os.path.exists(old_destination):
-                destination = episode.local_filename(create=True, force_update=True)
-                if old_destination != destination and os.path.exists(old_destination):
-                    try:
-                        os.remove(old_destination)
-                    except OSError:
-                        pass
-                episode.file_size = os.path.getsize(destination) if os.path.exists(destination) else getattr(episode, 'file_size', 0)
-                episode.state = gpodder.STATE_DOWNLOADED
+            if media_url:
+                episode.url = media_url
+                episode.mime_type = mimetypes.guess_type(media_url)[0] or episode.mime_type or 'application/octet-stream'
+                episode.file_size = getattr(episode, 'file_size', 0) or 0
+
+                # Do not mark as downloaded if this is an online-only episode.
+                if is_new_record:
+                    episode.state = gpodder.STATE_NORMAL
+
+            elif replace_media:
+                raise ManualEntryError(_('A replacement media file or online media URL is required.'))
+
+            else:
+                # Re-run naming logic if metadata changed and a managed file exists.
+                if old_destination and os.path.exists(old_destination):
+                    destination = episode.local_filename(create=True, force_update=True)
+                    if old_destination != destination and os.path.exists(old_destination):
+                        try:
+                            os.remove(old_destination)
+                        except OSError:
+                            pass
+                    episode.file_size = os.path.getsize(destination) if os.path.exists(destination) else getattr(episode, 'file_size', 0)
+                    episode.state = gpodder.STATE_DOWNLOADED
 
         episode.is_new = bool(is_new)
         if not episode.is_new:
