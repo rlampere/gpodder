@@ -42,7 +42,7 @@ _ = gpodder.gettext
 # Plural-aware text string processor (1 egg, 2 eggs)
 N_ = gpodder.ngettext
 
-# Set up module-level logger.
+# Set up module-level logging.
 logger = logging.getLogger(__name__)
 #logger.setLevel(logging.INFO)
 
