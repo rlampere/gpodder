@@ -47,10 +47,10 @@ except Exception:  # pragma: no cover - optional dependency
     class MutagenError(Exception):
         pass
 
-import gi  # isort:skip
+import gi
 
-gi.require_version('Gtk', '3.0')  # isort:skip
-from gi.repository import Gio, GLib, Gtk  # isort:skip
+gi.require_version('Gtk', '3.0')
+from gi.repository import Gio, GLib, Gtk, GdkPixbuf
 
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -71,11 +71,10 @@ DEFAULT_COL_SPACING = 14
 DEFAULT_ROW_SPACING = 10
 DEFAULT_MARGIN = 12
 
-class ManualEntryError(Exception):
-    pass
-
-#RobL--v
-# Utility function to get the appropriate description text for an episode to show
+#===============================================================================
+# Helper Functions
+#===============================================================================
+# Helper function to get the appropriate description text for an episode to show
 # in the manual episode editor dialog.
 def _episode_edit_description(episode):
     """Return the description text to show in the manual episode editor.
@@ -94,19 +93,16 @@ def _episode_edit_description(episode):
         return episode.description
 
     return ''
-#RobL--^
 
-#RobL--v
-# Utility function to determine if episode description should be saved as HTML
+# Helper function to determine if episode description should be saved as HTML
 # or plain text.
 def _episode_edit_description_is_html(episode):
     """Return True if the manual episode editor should save description as HTML."""
     return bool(episode is not None and episode.description_html)
-#RobL--^
 
-#RobL--v
-# Utility function to display a confirmation message box to the user.
+# Helper function to display a confirmation message box to the user.
 def _ask_yes_no(parent, title, message):
+    """Display a yes/no confirmation dialog and return True if the user clicks Yes."""
     dialog = Gtk.MessageDialog(
         transient_for=parent,
         modal=True,
@@ -121,13 +117,12 @@ def _ask_yes_no(parent, title, message):
     dialog.destroy()
 
     return response == Gtk.ResponseType.YES
-#RobL--^
 
-#RobL--v
-# Utility function to check if a given URL is reachable by making a HEAD request
+# Helper function to check if a given URL is reachable by making a HEAD request
 # with a timeout. If the URL starts with "manual:" or is reachable (returns a
 # 2xx or 3xx status code) return True.
 def _is_url_reachable(url, timeout=10):
+    """Return True if the URL is reachable (HTTP status 2xx or 3xx) or starts with [manual:]."""
     url = (url or '').strip()
 
     if url.startswith("manual:"):
@@ -148,15 +143,16 @@ def _is_url_reachable(url, timeout=10):
 
     except (URLError, HTTPError, TimeoutError):
         return False
-#RobL--^
 
 def _slugify(value):
+    """Convert a string into a slug suitable for use in URLs or GUIDs.""" 
     value = (value or '').strip().lower()
     value = re.sub(r'[^a-z0-9]+', '-', value)
     value = value.strip('-')
     return value or 'item'
 
 def _stringify_tag_value(value):
+    """Convert a Mutagen tag value into a plain string for display."""
     if value is None:
         return ''
 
@@ -176,6 +172,7 @@ def _stringify_tag_value(value):
     return str(value).strip()
 
 def _get_tag_value(audio, *keys):
+    """Return the value of the first matching tag key from the audio file's tags."""
     if audio is None:
         return ''
 
@@ -205,12 +202,17 @@ def _get_tag_value(audio, *keys):
     return ''
 
 def _extract_media_metadata(path_obj):
+    """Extract podcast episode metadata from a media file using Mutagen, if available."""
     source = pathlib.Path(path_obj).expanduser().resolve()
+
     title = source.stem
     description = ''
     published = int(source.stat().st_mtime)
-
-    #print('MutagenFile =', MutagenFile)
+    link = ''
+    guid = ''
+    season_num = 0
+    episode_num = 0
+    total_time = 0
 
     if MutagenFile is not None:
         audio_easy = None
@@ -225,6 +227,14 @@ def _extract_media_metadata(path_obj):
             audio_raw = MutagenFile(str(source))
         except (MutagenError, OSError, ValueError, TypeError):
             audio_raw = None
+
+        # Duration
+        try:
+            info = getattr(audio_raw, 'info', None) or getattr(audio_easy, 'info', None)
+            length = getattr(info, 'length', 0) or 0
+            total_time = int(length)
+        except Exception:
+            total_time = 0
 
         # Title
         tag_title = _get_tag_value(audio_easy, 'title')
@@ -245,13 +255,143 @@ def _extract_media_metadata(path_obj):
         if tag_description:
             description = tag_description
 
+        # Published date
+        tag_date = _get_tag_value(
+            audio_easy,
+            'date', 'year', 'originaldate', 'releasedate'
+        )
+        if not tag_date:
+            tag_date = _get_tag_value(
+                audio_raw,
+                'TDRC', 'TYER', 'TDOR', 'TDAT', 'date', 'year', '©day'
+            )
+
+        tag_published = _parse_tag_date_to_timestamp(tag_date)
+        if tag_published:
+            published = tag_published
+
+        # Episode page / website link
+        tag_link = _get_tag_value(
+            audio_easy,
+            'website', 'url', 'podcasturl', 'episodeurl'
+        )
+        if not tag_link:
+            tag_link = _get_tag_value(
+                audio_raw,
+                'WOAS', 'WXXX', 'website', 'url', 'podcasturl', 'episodeurl'
+            )
+        if tag_link:
+            link = tag_link
+
+        # GUID / unique identifier
+        tag_guid = _get_tag_value(
+            audio_easy,
+            'guid', 'podcastguid', 'episodeguid'
+        )
+        if not tag_guid:
+            tag_guid = _get_tag_value(
+                audio_raw,
+                'UFID', 'guid', 'podcastguid', 'episodeguid'
+            )
+        if tag_guid:
+            guid = tag_guid
+
+        # Season number, if present as a custom tag.
+        tag_season = _get_tag_value(
+            audio_easy,
+            'season', 'seasonnumber', 'podcastseason'
+        )
+        if not tag_season:
+            tag_season = _get_tag_value(
+                audio_raw,
+                'season', 'seasonnumber', 'podcastseason'
+            )
+        season_num = _parse_first_int(tag_season)
+
+        # Episode number. Track number is a reasonable fallback for manually tagged files.
+        tag_episode = _get_tag_value(
+            audio_easy,
+            'episode', 'episodenumber', 'podcastepisode', 'tracknumber'
+        )
+        if not tag_episode:
+            tag_episode = _get_tag_value(
+                audio_raw,
+                'episode', 'episodenumber', 'podcastepisode', 'TRCK', 'tracknumber'
+            )
+        episode_num = _parse_first_int(tag_episode)
+
     return {
         'title': title.strip() or source.stem,
         'description': description.strip(),
         'published': published,
         'media_file': str(source),
+        'link': link.strip(),
+        'guid': guid.strip(),
+        'season_num': season_num,
+        'episode_num': episode_num,
+        'total_time': total_time,
     }
 
+def _media_metadata_to_episode_metadata(metadata):
+    """Convert local media file tags into the same object shape used by online metadata."""
+
+    return podcastmetadata.MetadataEpisode(
+        title=metadata.get('title') or '',
+        url='',  # Do not populate Media URL from a local file.
+        link=metadata.get('link') or '',
+        description=metadata.get('description') or '',
+        published=metadata.get('published') or 0,
+        duration=metadata.get('total_time') or 0,
+        image_url='',  # Embedded artwork is not a URL.
+        season=metadata.get('season_num') or 0,
+        number=metadata.get('episode_num') or 0,
+        guid=metadata.get('guid') or '',
+        source='mp3-tags',
+        source_id=metadata.get('media_file') or '',
+        raw=metadata,
+    )
+
+def _parse_first_int(value):
+    value = (value or '').strip()
+    if not value:
+        return 0
+
+    # Handles "12", "12/30", "S02E12", etc.
+    match = re.search(r'\d+', value)
+    return int(match.group(0)) if match else 0
+
+def _parse_tag_date_to_timestamp(value):
+    value = (value or '').strip()
+    if not value:
+        return 0
+
+    # Common tag forms:
+    #   2026
+    #   2026-05-22
+    #   2026-05-22 13:30
+    #   2026-05-22T13:30:00
+    value = value.replace('T', ' ').replace('Z', '').strip()
+
+    for fmt in (
+            '%Y-%m-%d %H:%M:%S',
+            '%Y-%m-%d %H:%M',
+            '%Y-%m-%d',
+            '%Y'):
+        try:
+            dt = _dt.datetime.strptime(value[:len(_dt.datetime.now().strftime(fmt))], fmt)
+            return int(dt.timestamp())
+        except Exception:
+            pass
+
+    return 0
+
+
+#===============================================================================
+class ManualEntryError(Exception):
+    pass
+
+
+#===============================================================================
 class ManualPodcastMetadataSearchDialog(Gtk.Dialog):
     """Search online podcast metadata providers and return one selected podcast."""
 
@@ -429,6 +569,7 @@ class ManualPodcastMetadataSearchDialog(Gtk.Dialog):
         return self.selected_podcast
 
 
+#===============================================================================
 class ManualPodcastMetadataApplyDialog(Gtk.Dialog):
     """Choose the metadata fields to copy into the manual podcast add/edit dialog."""
 
@@ -653,9 +794,10 @@ class ManualPodcastMetadataApplyDialog(Gtk.Dialog):
 
         return sw
 
-
+#===============================================================================
 class ManualPodcastDialog(Gtk.Dialog):
-    def __init__(self, parent, config, podcast=None):
+
+    def __init__(self, parent, config, podcast=None, section_names=None):
         self.config = config
         self.podcast = podcast
         self.is_edit = podcast is not None
@@ -703,9 +845,48 @@ class ManualPodcastDialog(Gtk.Dialog):
         self.podcast_cover_url_entry.set_placeholder_text('https://example.com/cover.jpg')
         self.podcast_cover_url_entry.set_hexpand(True)
 
+        # Add a field for the podcast cover image.
+        self.local_cover_file = None
+        self.cover_preview_update_source_id = None
+
+        self.podcast_cover_url_entry.connect('changed', self.on_cover_url_changed)
+
+        self.cover_image = Gtk.Image()
+        self.cover_image.set_pixel_size(160)
+
+        self.cover_status_label = Gtk.Label(label='', xalign=0)
+        self.cover_status_label.set_line_wrap(True)
+
+        self.choose_cover_file_button = Gtk.Button.new_with_label(_('Choose JPG...'))
+        self.choose_cover_file_button.set_tooltip_text(
+            _('Choose a local JPG file to use as this podcast cover.')
+        )
+        self.choose_cover_file_button.connect('clicked', self.on_choose_cover_file_clicked)
+
+        self.clear_cover_file_button = Gtk.Button.new_with_label(_('Clear local file'))
+        self.clear_cover_file_button.set_tooltip_text(
+            _('Clear the selected local cover file.')
+        )
+        self.clear_cover_file_button.connect('clicked', self.on_clear_cover_file_clicked)
+
+        cover_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        cover_button_box.pack_start(self.choose_cover_file_button, False, False, 0)
+        cover_button_box.pack_start(self.clear_cover_file_button, False, False, 0)
+
+        cover_preview_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        cover_preview_box.set_hexpand(True)
+        cover_preview_box.pack_start(self.cover_image, False, False, 0)
+        cover_preview_box.pack_start(self.cover_status_label, False, False, 0)
+        cover_preview_box.pack_start(cover_button_box, False, False, 0)
+
         # Add a field for the podcast display section - use Other as the default.
-        self.podcast_section_entry = Gtk.Entry()
-        self.podcast_section_entry.set_text(_('Other'))
+        self.podcast_section_combo = Gtk.ComboBoxText.new_with_entry()
+        self.podcast_section_combo.set_hexpand(True)
+
+        for section in section_names or [_('Other')]:
+            self.podcast_section_combo.append_text(section)
+
+        self._set_section_text(_('Other'))
 
         # Add a scrollable window for the podcast description.
         self.podcast_description = Gtk.TextView(wrap_mode=Gtk.WrapMode.WORD)
@@ -728,7 +909,8 @@ class ManualPodcastDialog(Gtk.Dialog):
             (_('Feed URL'), self.podcast_feed_url_entry),
             (_('Website Link'), self.podcast_website_link_entry),
             (_('Cover Art URL'), self.podcast_cover_url_entry),
-            (_('Section'), self.podcast_section_entry),
+            (_('Cover Preview'), cover_preview_box),
+            (_('Section'), self.podcast_section_combo),
             (_('Description'), podcast_desc_sw),
         ):
             lbl = Gtk.Label(label=label, xalign=0)
@@ -743,7 +925,7 @@ class ManualPodcastDialog(Gtk.Dialog):
             self.podcast_feed_url_entry.set_text(podcast.url or '')
             self.podcast_website_link_entry.set_text(podcast.link or '')
             self.podcast_cover_url_entry.set_text(getattr(podcast, 'cover_url', None) or '')
-            self.podcast_section_entry.set_text(getattr(podcast, 'section', '') or _('Other'))
+            self._set_section_text(getattr(podcast, 'section', '') or _('Other'))
             buf = self.podcast_description.get_buffer()
             buf.set_text((podcast.description or '').strip())
             self.metadata_image_url = getattr(podcast, 'cover_url', None)
@@ -754,6 +936,7 @@ class ManualPodcastDialog(Gtk.Dialog):
             #logger.warning('podcast.cover_file: %s', getattr(podcast, 'cover_file', None))
             #logger.warning('podcast.cover_url: %s', getattr(podcast, 'cover_url', None))
 
+        self.update_cover_preview()
         self.show_all()
 
     def on_find_metadata_clicked(self, button):
@@ -802,12 +985,14 @@ class ManualPodcastDialog(Gtk.Dialog):
         if ManualPodcastMetadataApplyDialog.FIELD_COVER_URL in selected_fields:
             if metadata.image_url:
                 self.podcast_cover_url_entry.set_text(metadata.image_url)
+                self.local_cover_file = None
+                self.update_cover_preview()
 
         if ManualPodcastMetadataApplyDialog.FIELD_SECTION in selected_fields:
             if getattr(metadata, 'categories', None):
                 section = metadata.categories[0] or ''
                 if section:
-                    self.podcast_section_entry.set_text(section)
+                    self._set_section_text.set_text(section)
 
         if ManualPodcastMetadataApplyDialog.FIELD_DESCRIPTION in selected_fields:
             if metadata.description:
@@ -871,7 +1056,7 @@ class ManualPodcastDialog(Gtk.Dialog):
             'feed_url': self.podcast_feed_url_entry.get_text().strip(),
             'website_url': self.podcast_website_link_entry.get_text().strip(),
             'cover_url': self.podcast_cover_url_entry.get_text().strip(),
-            'section': self.podcast_section_entry.get_text().strip(),
+            'section': self._get_section_text(),
             'description': buf.get_text(
                 buf.get_start_iter(),
                 buf.get_end_iter(),
@@ -879,15 +1064,161 @@ class ManualPodcastDialog(Gtk.Dialog):
             ).strip(),
         }
 
-    def get_data(self):
-        buf = self.podcast_description.get_buffer()
+    #---------------------------------------------------------------------------
+    # Cover Preview Handling
+    #---------------------------------------------------------------------------
+    def on_cover_url_changed(self, entry):
+        """Refresh preview shortly after the user changes the cover URL."""
 
+        # If a URL is present, URL takes priority over a selected local file.
+        if entry.get_text().strip():
+            self.local_cover_file = None
+
+        self.update_cover_file_buttons()
+
+        if self.cover_preview_update_source_id:
+            GLib.source_remove(self.cover_preview_update_source_id)
+
+        self.cover_preview_update_source_id = GLib.timeout_add(
+            700,
+            self._delayed_cover_preview_update,
+        )
+
+    def _delayed_cover_preview_update(self):
+        self.cover_preview_update_source_id = None
+        self.update_cover_preview()
+        return False
+
+    def update_cover_file_buttons(self):
+        has_url = bool(self.podcast_cover_url_entry.get_text().strip())
+
+        # Local upload is available only when no Cover Art URL is entered.
+        self.choose_cover_file_button.set_sensitive(not has_url)
+        self.clear_cover_file_button.set_sensitive(
+            not has_url and bool(self.local_cover_file)
+        )
+
+    def update_cover_preview(self):
+        cover_url = self.podcast_cover_url_entry.get_text().strip()
+
+        self.update_cover_file_buttons()
+
+        if cover_url:
+            self._set_cover_preview_from_url(cover_url)
+            return
+
+        if self.local_cover_file:
+            self._set_cover_preview_from_file(self.local_cover_file)
+            return
+
+        # Editing an existing podcast with no cover URL may still have folder.jpg.
+        if self.is_edit and self.podcast is not None:
+            local_folder_jpg = os.path.join(self.podcast.save_dir, 'folder.jpg')
+            if os.path.exists(local_folder_jpg):
+                self._set_cover_preview_from_file(local_folder_jpg)
+                self.cover_status_label.set_text(_('Current local cover: folder.jpg'))
+                return
+
+        self.cover_image.clear()
+        self.cover_status_label.set_text(
+            _('No cover selected. Enter a Cover Art URL or choose a local JPG file.')
+        )
+
+    def _set_cover_preview_from_file(self, filename):
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
+                filename,
+                160,
+                160,
+                True,
+            )
+            self.cover_image.set_from_pixbuf(pixbuf)
+            self.cover_status_label.set_text(filename)
+        except Exception:
+            logger.warning('Could not load cover preview from file: %s', filename, exc_info=True)
+            self.cover_image.clear()
+            self.cover_status_label.set_text(_('Could not preview selected cover file.'))
+
+    def _set_cover_preview_from_url(self, url):
+        try:
+            response = util.urlopen(url, timeout=10)
+            if response.status_code != 200:
+                raise ValueError('%s returned status code %d' % (url, response.status_code))
+
+            loader = GdkPixbuf.PixbufLoader()
+            loader.write(response.content)
+            loader.close()
+
+            pixbuf = loader.get_pixbuf()
+            if pixbuf is None:
+                raise ValueError('URL did not contain a supported image.')
+
+            scaled = pixbuf.scale_simple(
+                160,
+                160,
+                GdkPixbuf.InterpType.BILINEAR,
+            )
+
+            self.cover_image.set_from_pixbuf(scaled)
+            self.cover_status_label.set_text(_('Preview loaded from Cover Art URL.'))
+
+        except Exception:
+            logger.warning('Could not load cover preview from URL: %s', url, exc_info=True)
+            self.cover_image.clear()
+            self.cover_status_label.set_text(_('Could not preview image from Cover Art URL.'))
+
+    def on_choose_cover_file_clicked(self, button):
+        dialog = Gtk.FileChooserNative.new(
+            _('Choose podcast cover JPG'),
+            self,
+            Gtk.FileChooserAction.OPEN,
+            _('_Open'),
+            _('_Cancel'),
+        )
+
+        jpg_filter = Gtk.FileFilter()
+        jpg_filter.set_name(_('JPEG images (*.jpg, *.jpeg)'))
+        jpg_filter.add_pattern('*.jpg')
+        jpg_filter.add_pattern('*.jpeg')
+        jpg_filter.add_pattern('*.JPG')
+        jpg_filter.add_pattern('*.JPEG')
+        dialog.add_filter(jpg_filter)
+
+        all_filter = Gtk.FileFilter()
+        all_filter.set_name(_('All files'))
+        all_filter.add_pattern('*')
+        dialog.add_filter(all_filter)
+
+        try:
+            response = dialog.run()
+
+            if response == Gtk.ResponseType.ACCEPT:
+                filename = dialog.get_filename()
+
+                if filename:
+                    self.local_cover_file = filename
+                    self.update_cover_preview()
+
+        finally:
+            dialog.destroy()
+
+    def on_clear_cover_file_clicked(self, button):
+        self.local_cover_file = None
+        self.update_cover_preview()
+
+    #---------------------------------------------------------------------------
+    # General/Helper Functions
+    #---------------------------------------------------------------------------
+    def get_data(self):
+        """ Return the current values from the dialog fields."""
+        buf = self.podcast_description.get_buffer()
         return {
             'title': self.podcast_title_entry.get_text().strip(),
             'url': self.podcast_feed_url_entry.get_text().strip(),
             'link': self.podcast_website_link_entry.get_text().strip(),
             'cover_url': self.podcast_cover_url_entry.get_text().strip(),
-            'section': self.podcast_section_entry.get_text().strip() or _('Other'),
+            'cover_file': self.local_cover_file,
+            'section': self._get_section_text() or _('Other'),
             'description': buf.get_text(
                 buf.get_start_iter(),
                 buf.get_end_iter(),
@@ -895,7 +1226,23 @@ class ManualPodcastDialog(Gtk.Dialog):
             ).strip(),
         }
 
+    def _get_section_text(self):
+        child = self.podcast_section_combo.get_child()
+        if child is not None:
+            return child.get_text().strip()
 
+        return self.podcast_section_combo.get_active_text() or ''
+
+    def _set_section_text(self, section):
+        """Helper function to set the podcast section text."""
+        section = (section or '').strip() or _('Other')
+
+        child = self.podcast_section_combo.get_child()
+        if child is not None:
+            child.set_text(section)
+
+
+#===============================================================================
 class ManualEpisodeMetadataSearchDialog(Gtk.Dialog):
     """Search online metadata for episodes belonging to the selected podcast."""
 
@@ -1145,6 +1492,7 @@ class ManualEpisodeMetadataSearchDialog(Gtk.Dialog):
         return self.selected_episode
 
 
+#===============================================================================
 class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
     """Choose the metadata fields to copy into the manual episode add/edit dialog."""
 
@@ -1159,7 +1507,8 @@ class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
     FIELD_EPISODE_ART_URL = 'episode_art_url'
     FIELD_DURATION = 'duration'
 
-    def __init__(self, parent, metadata, current_values=None, is_edit=False):
+    def __init__(self, parent, metadata, current_values=None, is_edit=False,
+             value_column_title=None, note_text=None):
         super().__init__(
             title=_('Apply episode metadata'),
             transient_for=parent,
@@ -1188,7 +1537,7 @@ class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
         area.add(outer)
 
         note = Gtk.Label(
-            label=_('Select the episode metadata fields to copy into the episode dialog.'),
+            label=note_text or _('Select the episode metadata fields to copy into the episode dialog.'),
             xalign=0,
         )
         outer.pack_start(note, False, False, 0)
@@ -1212,7 +1561,7 @@ class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
         grid.attach(self._make_header_label(_('Use')), 0, 0, 1, 1)
         grid.attach(self._make_header_label(_('Field')), 1, 0, 1, 1)
         grid.attach(self._make_header_label(_('Current value')), 2, 0, 1, 1)
-        grid.attach(self._make_header_label(_('Online value')), 3, 0, 1, 1)
+        grid.attach(self._make_header_label(value_column_title or _('Online value')),3, 0, 1, 1)
 
         rows = [
             (self.FIELD_TITLE, _('Title'), current_values.get('title', ''), metadata.title or '', True),
@@ -1357,6 +1706,7 @@ class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
         return sw
 
 
+#===============================================================================
 class ManualEpisodeDialog(Gtk.Dialog):
     def __init__(self, parent, config, podcasts, active_podcast=None, episode=None):
         self.config = config
@@ -1413,9 +1763,24 @@ class ManualEpisodeDialog(Gtk.Dialog):
         title_box.pack_start(self.entry_title, True, True, 0)
         title_box.pack_start(self.find_episode_metadata_button, False, False, 0)
 
+        # Replacing the media file will cause existing metadata fields to be overwritten with the
+        # new file's metadata, so show a warning and give the option to skip copying metadata
+        # from the new file. If not editing an existing episode, default to copying metadata
+        # from the new file since there is no existing file/metadata to overwrite.
         self.file_media = Gtk.FileChooserButton.new(_('Select media file'), Gtk.FileChooserAction.OPEN)
         self.file_media.set_hexpand(True)
         self.file_media.connect('selection-changed', self.on_media_file_selected)
+
+        self.read_media_tags_button = Gtk.Button.new_with_label(_('Read tags...'))
+        self.read_media_tags_button.set_tooltip_text(
+            _('Read metadata tags from the selected media file and choose which fields to apply.')
+        )
+        self.read_media_tags_button.connect('clicked', self.on_read_media_tags_clicked)
+
+        media_file_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        media_file_box.set_hexpand(True)
+        media_file_box.pack_start(self.file_media, True, True, 0)
+        media_file_box.pack_start(self.read_media_tags_button, False, False, 0)
 
         self.media_help_label = Gtk.Label(
             label=_('<Select a media file first so the title, description, and published date fields can be populated.>'),
@@ -1479,7 +1844,7 @@ class ManualEpisodeDialog(Gtk.Dialog):
         row += 1
 
         grid.attach(Gtk.Label(label=_('Media file'), xalign=0), 0, row, 1, 1)
-        grid.attach(self.file_media, 1, row, 1, 1)
+        grid.attach(media_file_box, 1, row, 1, 1)
         row += 1
 
         if self.is_edit:
@@ -1551,6 +1916,60 @@ class ManualEpisodeDialog(Gtk.Dialog):
         idx = self.combo_podcast.get_active()
         return None if idx < 0 else self._podcasts[idx]
 
+    def on_read_media_tags_clicked(self, button):
+        filename = self._get_media_file_for_tag_reading()
+        logger.info('Reading media tags from: %s', filename)
+
+        if not filename:
+            self._show_error(
+                _('No media file available'),
+                _(
+                    'Select an MP3/media file, or edit an episode that already has '
+                    'a downloaded local media file.'
+                )
+            )
+            return
+
+        try:
+            tag_data = _extract_media_metadata(filename)
+        except Exception as exc:
+            logger.warning('Could not read media tags from %s', filename, exc_info=True)
+            self._show_error(
+                _('Could not read media tags'),
+                str(exc),
+            )
+            return
+
+        metadata = _media_metadata_to_episode_metadata(tag_data)
+
+        self.choose_and_apply_media_tag_metadata(metadata)
+
+    def choose_and_apply_media_tag_metadata(self, metadata):
+        current_values = self.get_current_episode_metadata_values()
+
+        dialog = ManualEpisodeMetadataApplyDialog(
+            self,
+            metadata,
+            current_values=current_values,
+            is_edit=self.is_edit,
+            value_column_title=_('Tag value'),
+            note_text=_('Select the media-file tag fields to copy into the episode dialog.'),
+        )
+
+        try:
+            response = dialog.run()
+            if response != Gtk.ResponseType.OK:
+                return
+
+            selected_fields = dialog.get_selected_fields()
+            if not selected_fields:
+                return
+
+        finally:
+            dialog.destroy()
+
+        self.apply_episode_metadata(metadata, selected_fields)
+
     def on_find_episode_metadata_clicked(self, button):
         podcast = self.get_selected_podcast()
         if podcast is None:
@@ -1578,7 +1997,6 @@ class ManualEpisodeDialog(Gtk.Dialog):
             dialog.destroy()
 
         self.choose_and_apply_episode_metadata(metadata)
-
 
     def choose_and_apply_episode_metadata(self, metadata):
         current_values = self.get_current_episode_metadata_values()
@@ -1693,21 +2111,9 @@ class ManualEpisodeDialog(Gtk.Dialog):
         if not filename:
             return
 
-        metadata = _extract_media_metadata(filename)
-        #print('TITLE =', repr(metadata.get('title')))
-        #print('DESCRIPTION =', repr(metadata.get('description')))
-        #print('PUBLISHED =', repr(metadata.get('published')))
-
-        self.entry_title.set_text(metadata.get('title', '') or '')
-
-        buf = self.text_description.get_buffer()
-        buf.set_text(metadata.get('description', '') or '')
-
-        published = metadata.get('published')
-        if published:
-            self.entry_published.set_text(
-                _dt.datetime.fromtimestamp(int(published)).strftime('%Y-%m-%d %H:%M')
-            )
+        self.media_help_label.set_text(
+            _('Media file selected. Click "Read tags..." to choose which tag values to apply.')
+        )
 
     def get_data(self):
         buf = self.text_description.get_buffer()
@@ -1734,7 +2140,52 @@ class ManualEpisodeDialog(Gtk.Dialog):
             'total_time': int(self.spin_duration.get_value()),
         }
 
+    def _get_media_file_for_tag_reading(self):
+        """Return the best media file to use for reading tags.
 
+        Priority:
+            1. Newly selected file in the file chooser
+            2. Existing local file for the episode being edited
+            3. None
+        """
+
+        # 1. Newly selected media file.
+        filename = self.file_media.get_filename()
+        if filename:
+            return filename
+
+        # 2. Existing episode media file.
+        if self.episode is not None:
+            try:
+                existing_filename = self.episode.local_filename(create=False)
+            except Exception:
+                logger.warning(
+                    'Could not get existing local filename for episode: %r',
+                    getattr(self.episode, 'title', None),
+                    exc_info=True,
+                )
+                existing_filename = None
+
+            if existing_filename and os.path.exists(existing_filename):
+                return existing_filename
+
+        # 3. Nothing available.
+        return None
+
+    def _show_error(self, title, message):
+        dialog = Gtk.MessageDialog(
+            transient_for=self,  #RobL - Formerly self.ui.main_window
+            modal=True,
+            message_type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.CLOSE,
+            text=title,
+        )
+        dialog.format_secondary_text(message)
+        dialog.run()
+        dialog.destroy()
+
+
+#===============================================================================
 class ManualBatchEpisodeDialog(Gtk.Dialog):
     def __init__(self, parent, podcasts, active_podcast=None):
         super().__init__(
@@ -1951,8 +2402,10 @@ class ManualBatchEpisodeDialog(Gtk.Dialog):
         return result['created']
 
 
+#===============================================================================
 class ManualEntryController(object):
-    """Glue object that can be attached to gPodder's main GTK window."""
+    """ Controller for handling manual entry of podcasts and episodes,
+        including opening dialogs and processing the data."""
 
     def __init__(self, ui):
         self.ui = ui
@@ -1987,7 +2440,11 @@ class ManualEntryController(object):
     def open_manual_add_podcast_dialog(self):
         """Open the dialog to manually create a new podcast."""
 
-        dialog = ManualPodcastDialog(self.ui.main_window, self.ui.config)
+        dialog = ManualPodcastDialog(
+            self.ui.main_window,
+            self.ui.config,
+            section_names=self._get_existing_podcast_sections(),
+        )
         try:
             # Loop to allow the user to fix validation issues in the dialog without having
             # to re-enter all the data again. The dialog will only close when the user clicks
@@ -2007,7 +2464,11 @@ class ManualEntryController(object):
 
                     # If the podcast was successfully created, refresh the UI to show the changes
                     # selecting the new podcast in the podcast list then exit the loop.
-                    self._refresh_ui_after_podcast_change(new_podcast, select=True)
+                    self._refresh_ui_after_podcast_change(
+                        new_podcast,
+                        select=True,
+                        sections_changed=True,
+                    )
                     break
 
         except Exception as exc:
@@ -2023,7 +2484,12 @@ class ManualEntryController(object):
         if podcast is None:
             return
 
-        dialog = ManualPodcastDialog(self.ui.main_window, self.ui.config, podcast=podcast)
+        dialog = ManualPodcastDialog(
+            self.ui.main_window,
+            self.ui.config,
+            podcast=podcast,
+            section_names=self._get_existing_podcast_sections(),
+        )
         try:
             # Loop to allow the user to fix validation issues in the dialog without having
             # to re-enter all the data again. The dialog will only close when the user clicks
@@ -2038,20 +2504,19 @@ class ManualEntryController(object):
                 # Update the podcast with the new data from the dialog. If the update
                 # fails (e.g. due to missing required fields), do not proceed with
                 # refreshing the UI and just return so the user can fix the issues
-                # in the dialog.
+                # in the dialog. Also determine if the podcast section was changed
+                # so we can refresh the UI appropriately after a successful update.
+                old_section = (getattr(podcast, 'section', '') or '').strip()
                 updated_podcast = self.update_manual_podcast(podcast, **dialog.get_data())
                 if updated_podcast is not None:
+                    new_section = (getattr(updated_podcast, 'section', '') or '').strip()
+                    sections_changed = (new_section != old_section)
 
-                    # If the podcast was successfully updated, refresh the podcast and episode
-                    # list models to reflect any changes to the podcast title or feed URL.
-                    # Note: update_podcast_list_model will select the podcast in the podcast
-                    # list based on feed URL - it cannot select based on title.
-                    self.ui.update_podcast_list_model(select_url=updated_podcast.url)
-                    self.ui.update_episode_list_model()
-
-                    # Refresh the UI to show the changes selecting the updated podcast
-                    # in the podcast list.
-                    self._refresh_ui_after_podcast_change(updated_podcast, select=True)
+                    self._refresh_ui_after_podcast_change(
+                        updated_podcast,
+                        select=True,
+                        sections_changed=sections_changed,
+                    )
                     break
 
         except Exception as exc:
@@ -2150,7 +2615,8 @@ class ManualEntryController(object):
         finally:
             dialog.destroy()
 
-    def create_manual_podcast(self, title, url, description='', link='', cover_url='', section=''):
+    def create_manual_podcast(self, title, url, description='', link='', cover_url='',
+                              cover_file='',  section=''):
         """Create a new podcast with the provided data from the add dialog."""
 
         # Verify a title was specified.
@@ -2195,11 +2661,18 @@ class ManualEntryController(object):
         podcast.save()
         podcast.get_save_dir(force_new=True)
         podcast.save()
-        self.ui.db.commit()  #RobL
+        self.ui.db.commit() # Added to commit changes to database
 
+        # Store the cover art for the podcast if a cover URL or file was provided.
+        self._store_manual_podcast_cover(
+            podcast,
+            cover_url=cover_url,
+            cover_file=cover_file,
+        )
         return podcast
 
-    def update_manual_podcast(self, podcast, title, url, link='', cover_url='', section='', description=''):
+    def update_manual_podcast(self, podcast, title, url, link='', cover_url='',
+                              cover_file='', section='', description=''):
         """Update the selected podcast with the provided data from the edit dialog."""
 
         title = (title or '').strip()
@@ -2272,7 +2745,21 @@ class ManualEntryController(object):
             podcast.cover_url = new_cover_url
 
         podcast.save()
-        self.ui.db.commit()  #RobL
+        self.ui.db.commit()  # Added to commit changes to database.
+
+        # If the cover URL changed or a local cover file was selected, store the new cover art for the podcast.
+        #   Cover URL changed  → download URL and save folder.jpg
+        #   Local JPG selected → copy local JPG and save folder.jpg
+        #   No cover changes   → leave folder.jpg alone
+        cover_url_changed = new_cover_url != old_cover_url
+        local_cover_selected = bool((cover_file or '').strip())
+
+        if cover_url_changed or local_cover_selected:
+            self._store_manual_podcast_cover(
+                podcast,
+                cover_url=new_cover_url or '',
+                cover_file=cover_file or '',
+            )
 
         # Clear the cover art cache for both the old and new URL to ensure the cover art gets
         # properly updated in the UI. This is done whether the URL is updated or not since the
@@ -2611,6 +3098,20 @@ class ManualEntryController(object):
             _('Published date must use YYYY-MM-DD or YYYY-MM-DD HH:MM.')
         )
 
+    def _get_existing_podcast_sections(self):
+        """Get the list of existing podcast section names."""
+        sections = set()
+
+        for podcast in self.ui.model.get_podcasts():
+            section = (getattr(podcast, 'section', '') or '').strip()
+            if section:
+                sections.add(section)
+
+        if not sections:
+            sections.add(_('Other'))
+
+        return sorted(sections, key=lambda value: value.lower())
+
     def _get_selected_existing_podcast(self):
         podcast = getattr(self.ui, 'active_channel', None)
 
@@ -2646,9 +3147,12 @@ class ManualEntryController(object):
             return None
         return episodes[0]
 
-    def _refresh_ui_after_podcast_change(self, podcast, select=False):
+    def _refresh_ui_after_podcast_change(self, podcast, select=False, sections_changed=False):
         select_url = podcast.url if select else None
-        self.ui.update_podcast_list_model(select_url=select_url)
+        self.ui.update_podcast_list_model(
+            select_url=select_url,
+            sections_changed=sections_changed,
+        )
         if getattr(self.ui, 'active_channel', None) and self.ui.active_channel.url == podcast.url:
             self.ui.update_episode_list_model()
             self.ui.update_episode_list_icons(update_all=True)
@@ -2662,6 +3166,98 @@ class ManualEntryController(object):
         else:
             self.ui.update_podcast_list_model(select_url=podcast.url)
 
+    #---------------------------------------------------------------------------
+    # Helper Functions - Manual Podcast Cover Art
+    #---------------------------------------------------------------------------
+    def _store_manual_podcast_cover(self, podcast, cover_url='', cover_file=''):
+        """Store manual podcast cover art locally as folder.jpg.
+
+        Priority:
+            1. Cover Art URL, if specified
+            2. Selected local JPG file, if specified
+            3. No change
+        """
+
+        cover_url = (cover_url or '').strip()
+        cover_file = (cover_file or '').strip()
+
+        if not cover_url and not cover_file:
+            return
+
+        save_dir = podcast.get_save_dir()
+        destination = os.path.join(save_dir, 'folder.jpg')
+
+        self._backup_existing_folder_jpg(destination)
+
+        if cover_url:
+            self._download_cover_url_to_folder_jpg(cover_url, destination)
+        else:
+            self._copy_local_cover_to_folder_jpg(cover_file, destination)
+
+        podcast.cover_thumb = None
+        podcast.save()
+        self.ui.db.commit()
+
+        self.ui.podcast_list_model.clear_cover_cache(podcast.url)
+
+    def _backup_existing_folder_jpg(self, destination):
+        if not os.path.exists(destination):
+            return
+
+        dirname = os.path.dirname(destination)
+        backup = os.path.join(dirname, 'old_cover.jpg')
+
+        if os.path.exists(backup):
+            timestamp = time.strftime('%Y%m%d-%H%M%S')
+            backup = os.path.join(dirname, 'old_cover_%s.jpg' % timestamp)
+
+        try:
+            logger.info('Backing up existing cover: %s -> %s', destination, backup)
+            os.replace(destination, backup)
+        except Exception:
+            logger.warning('Could not back up existing folder.jpg', exc_info=True)
+
+    def _copy_local_cover_to_folder_jpg(self, source, destination):
+        if not source or not os.path.exists(source):
+            raise ManualEntryError(_('Selected cover image was not found.'))
+
+        if not self._is_jpeg_file(source):
+            raise ManualEntryError(_('Selected cover image must be a JPG file.'))
+
+        logger.info('Copying local podcast cover: %s -> %s', source, destination)
+        shutil.copyfile(source, destination)
+
+    def _download_cover_url_to_folder_jpg(self, cover_url, destination):
+        logger.info('Downloading manual podcast cover: %s', cover_url)
+
+        response = util.urlopen(cover_url, timeout=15)
+        if response.status_code != 200:
+            raise ManualEntryError(
+                _('Cover Art URL returned status code %d.') % response.status_code
+            )
+
+        loader = GdkPixbuf.PixbufLoader()
+        loader.write(response.content)
+        loader.close()
+
+        pixbuf = loader.get_pixbuf()
+        if pixbuf is None:
+            raise ManualEntryError(_('Cover Art URL did not contain a supported image.'))
+
+        # Always save as folder.jpg, even if the source was PNG/GIF/etc.
+        pixbuf.savev(destination, 'jpeg', ['quality'], ['95'])
+
+    def _is_jpeg_file(self, filename):
+        try:
+            with open(filename, 'rb') as fp:
+                header = fp.read(3)
+            return header.startswith(b'\xff\xd8')
+        except Exception:
+            return False
+
+    #---------------------------------------------------------------------------
+    # General Helper Functions
+    #---------------------------------------------------------------------------
     def _show_error(self, title, message):
         dialog = Gtk.MessageDialog(
             transient_for=self.ui.main_window,
