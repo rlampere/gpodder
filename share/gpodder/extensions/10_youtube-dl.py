@@ -404,7 +404,7 @@ class gPodderYoutubeDL(download.CustomDownloader):
             try:
                 with youtube_dl.YoutubeDL(opts) as ydl:
                     ydl.process_ie_result(tmp, download=False)
-                    new_entries.extend(tmp.get('entries'))
+                    new_entries.extend(tmp.get('entries') or [])
             except youtube_dl.utils.DownloadError as ex:
                 if ex.exc_info[0] == youtube_dl.utils.ExtractorError:
                     # for instance "This video contains content from xyz, who has blocked it on copyright grounds"
@@ -599,7 +599,7 @@ class gPodderExtension:
         success = False
         try:
             output = subprocess.check_output(
-                    ['pythonw', '-m', 'pip', 'index', 'versions', program_name],
+                    [sys.executable, '-m', 'pip', 'index', 'versions', program_name],
                     stderr=subprocess.STDOUT,
                     encoding='utf-8',
                     close_fds=True,
@@ -633,7 +633,7 @@ class gPodderExtension:
     def do_update(self, widget):
         try:
             subprocess.check_output(
-                    ['pythonw', '-m', 'pip', 'install', '--upgrade', program_name],
+                    [sys.executable, '-m', 'pip', 'install', '--upgrade', program_name],
                     stderr=subprocess.STDOUT,
                     encoding='utf-8',
                     close_fds=True,
