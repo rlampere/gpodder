@@ -26,7 +26,7 @@ import re
 import shutil
 import sys
 import tempfile
-import threading  #RobL
+import threading  #RobL - Added for threading in deferred tasks
 import time
 import urllib.parse
 
@@ -43,8 +43,8 @@ from gpodder.services import AutoRegisterObserver
 from gpodder.syncui import gPodderSyncUI
 
 from . import shownotes
-from .manual_entry import ManualEntryController  #RobL
-from .model import GUITheme                      #RobL
+from .manual_entry import ManualEntryController  #RobL - Added for manual entry of podcasts and episodes
+from .model import GUITheme                      #RobL - Added for GUI theme management
 from .desktop.channel import gPodderChannel
 from .desktop.episodeselector import gPodderEpisodeSelector
 from .desktop.exportlocal import gPodderExportToLocalFolder
@@ -66,15 +66,11 @@ import gi  # isort:skip
 gi.require_version('Gtk', '3.0')  # isort:skip
 from gi.repository import Gdk, Gio, GLib, Gtk, Pango  # isort:skip
 
-# Text string processor for internationalization/localization.
-_ = gpodder.gettext
 
-# Plural-aware text string processor (1 egg, 2 eggs)
-N_ = gpodder.ngettext
-
-# Set up module-level logger.
 logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
+
+_ = gpodder.gettext
+N_ = gpodder.ngettext
 
 
 class gPodder(BuilderWidget):
@@ -90,12 +86,12 @@ class gPodder(BuilderWidget):
         self._search_podcasts = None
         self._search_episodes = None
 
-        # RobL--v
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # Progress indicator used by the deferred partial-download scan.
         # Initialize it here so offer_resuming() can safely test it even
         # when no partial-download progress window has been created.
         self.partial_downloads_indicator = None
-        # RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         BuilderWidget.__init__(self, None,
             _gtk_properties={('gPodder', 'application'): app})
@@ -134,7 +130,7 @@ class gPodder(BuilderWidget):
 
         self.main_window.show()
 
-        #RobL--v
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # In Windows, the taskbar icon can show as a Python application
         # rather than the gPodder+ app. This code attempts to force an update
         # to the taskbar icon. We first set the main window icon from the
@@ -149,9 +145,7 @@ class gPodder(BuilderWidget):
             except Exception:
                 logger.warning('Could not set main window icon from %s',
                             gpodder.icon_file, exc_info=True)
-        #RobL--^
 
-        #RobL--v
         def force_windows_taskbar_refresh():
             current_title = self.gPodder.get_title()
             self.gPodder.set_title(current_title + ' ')
@@ -166,17 +160,13 @@ class gPodder(BuilderWidget):
             return False
 
         GLib.timeout_add(500, force_windows_taskbar_refresh)
-        #RobL--^
 
-        self.clear_app_status()  # RobL - Clear the general app status area.
+        self.clear_app_status()  # Clear the general app status area.
 
-        #RobL--v
         # Load a custom CSS stylesheet to improve the visibility of the
         # selected row in the treeviews, especially in dark themes.
         self.load_custom_gtk_css()
-        #RobL--^
 
-        #RobL--v
         # Show a progress indicator during startup.
         debug_pause=0.0  # Set to 0 to disable the artificial pause.
         self.startup_indicator = ProgressIndicator(
@@ -190,7 +180,7 @@ class gPodder(BuilderWidget):
         self.startup_indicator.on_message(_('Preparing main window...'))
         self.startup_indicator.on_progress(0.10)
         self.startup_pause(debug_pause)
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         self.gPodder.connect('key-press-event', self.on_key_press)
 
@@ -242,7 +232,7 @@ class gPodder(BuilderWidget):
         self._add_podcast_dialog = None
 
         self.default_title = None
-        self.set_title(_('gPodder+'))  # RobL
+        self.set_title(_('gPodder+'))  #RobL - Was 'gPodder'
 
         self.cover_downloader = CoverDownloader()
 
@@ -256,12 +246,12 @@ class gPodder(BuilderWidget):
         self._podcast_list_search_timeout = None
         self._episode_list_search_timeout = None
 
-        #RobL--v
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # Show a progress indicator update.
         self.startup_indicator.on_message(_('Loading podcasts from database...'))
         self.startup_indicator.on_progress(0.20)
         self.startup_pause(debug_pause)
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         # Subscribed channels
         self.active_channel = None
@@ -270,17 +260,22 @@ class gPodder(BuilderWidget):
         # For loading the list model
         self.episode_list_model = EpisodeListModel(self.on_episode_list_filter_changed)
 
-        self.manual_entry_controller = ManualEntryController(self)  #RobL
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Added a manual entry controller for handling manual entry of podcasts
+        # and episodes.
+        self.manual_entry_controller = ManualEntryController(self)
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+
         self.create_actions()
 
         self.releasecell = None
 
-        #RobL--v
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # Show a progress indicator update.
         self.startup_indicator.on_message(_('Building podcast and episode views...'))
         self.startup_indicator.on_progress(0.30)
         self.startup_pause(debug_pause)
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         # Init the treeviews that we use
         self.init_podcast_list_treeview()
@@ -292,12 +287,12 @@ class gPodder(BuilderWidget):
         self.things_adding_tasks = 0
         self.download_task_monitors = set()
 
-        #RobL--v
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # Show a progress indicator update.
         self.startup_indicator.on_message(_('Loading playback applications...'))
         self.startup_indicator.on_progress(0.50)
         self.startup_pause(debug_pause)
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         # Set up the first instance of MygPoClient
         self.mygpo_client = my.MygPoClient(self.config)
@@ -327,12 +322,12 @@ class gPodder(BuilderWidget):
         self.user_apps_reader = UserAppsReader(['audio', 'video'])
         util.run_in_background(self.user_apps_reader.read)
 
-        #RobL--v
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # Show a progress indicator update.
         self.startup_indicator.on_message(_('Updating podcast list...'))
         self.startup_indicator.on_progress(0.60)
         self.startup_pause(debug_pause)
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         # Now, update the feed cache, when everything's in place
         if not self.application.want_headerbar:
@@ -340,33 +335,44 @@ class gPodder(BuilderWidget):
         self.feed_cache_update_cancelled = False
         self.update_podcast_list_model()
 
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Commented out because this logic has been moved to a deferred task
+        # that runs after startup is complete, to avoid doing potentially 
+        # slow operations during startup before the UI is usable. See
+        # find_partial_downloads_deferred() and check_download_folders_deferred().
+        #self.partial_downloads_indicator = None
+        #util.run_in_background(self.find_partial_downloads)
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+
         # Start the auto-update procedure
         self._auto_update_timer_source_id = None
         if self.config.auto.update.enabled:
             self.restart_auto_update_timer()
-        #RobL--v
+
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # Show a progress indicator update.
         self.startup_indicator.on_message(_('Checking for old and expired episodes...'))
         self.startup_indicator.on_progress(0.70)
         self.startup_pause(debug_pause)
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-        #RobL--v
-        # Temporarily disabling this check -- not sure I want this done automatically.
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Temporarily disabling this check because I am not sure I want this
+        # done automatically.
         # Find expired (old) episodes and delete them
         #old_episodes = list(common.get_expired_episodes(self.channels, self.config))
         #if len(old_episodes) > 0:
         #    self.delete_episode_list(old_episodes, confirm=False)
         #    updated_urls = {e.channel.url for e in old_episodes}
         #    self.update_podcast_list_model(updated_urls)
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-        #RobL--v
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # Show a progress indicator update.
         self.startup_indicator.on_message(_('Starting web service sync...'))
         self.startup_indicator.on_progress(0.80)
         self.startup_pause(debug_pause)
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         # Do the initial sync with the web service
         if self.mygpo_client.can_access_webservice():
@@ -385,7 +391,7 @@ class gPodder(BuilderWidget):
                 if not os.path.exists(gpodder.no_update_check_file):
                     self.check_for_updates(silent=True)
 
-        #RobL--v
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # Show a final progress indicator update. The first message saying
         # "Updating episode list..." is a bit of a catch-all for the remaining
         # startup tasks that don't have their own progress updates, and the second
@@ -399,21 +405,17 @@ class gPodder(BuilderWidget):
         self.startup_pause(0.5)
         self.startup_indicator.on_finished()
         self.startup_indicator = None
-        #RobL--^
 
-        #RobL--v
         # Defer start of finding partial downloads until the UI is usable.
         defer_secs=1  # Number of seconds to defer start
         logger.info(f'Scheduling deferred scan for partial downloads - wait %s seconds' % defer_secs)
         GLib.timeout_add_seconds(defer_secs, self.find_partial_downloads_deferred)
-        #RobL--^
 
-        #RobL--v
         # Defer slow network-share download-folder checks until the UI is usable.
         defer_secs+=2  # Number of seconds to defer start
         logger.info(f'Scheduling deferred check of download folders - wait %s seconds' % defer_secs)
         GLib.timeout_add_seconds(defer_secs, self.check_download_folders_deferred)
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         if self.options.close_after_startup:
             logger.warning("Startup done, closing (--close-after-startup)")
@@ -423,13 +425,14 @@ class gPodder(BuilderWidget):
     def create_actions(self):
         g = self.gPodder
 
-        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # This section has been reorganized and commented to group the action
         # definitions by their location in the UI and their functionality,
         # rather than just listing them in a long sequence. The first section
         # focuses on actions used in the menubar. These actions are created
         # using Gio.SimpleAction, which allows us to define actions with
         # optional state (for checkboxes, radio buttons, etc.)
+
         # ----------------------------------------------------------------------
         # Actions for Stateful Menu Options (checkboxes, radio buttons, etc.)
         # ----------------------------------------------------------------------
@@ -445,7 +448,7 @@ class gPodder(BuilderWidget):
         # Action to lock or unlock all episodes of the selected podcast.
         action = Gio.SimpleAction.new_stateful(
             'allEpisodesLockSelectedPodcast', None, GLib.Variant.new_boolean(False))  # Formerly channelAutoArchive
-        action.connect('activate', self.on_all_episodes_lock_selected_podcast)   # Formerly on_channel_toggle_lock_activate
+        action.connect('activate', self.on_all_episodes_lock_selected_podcast)  # Formerly on_channel_toggle_lock_activate
         g.add_action(action)
 
         # Action to set a podcast flag indicating new episodes will be automatically
@@ -559,32 +562,32 @@ class gPodder(BuilderWidget):
             # -----------------------------------------------------------
             # Menubar -> Podcast (actions for managing SELECTED podacast)
             # -----------------------------------------------------------
-            ('showPodcastDetails', self.on_show_podcast_details),                                       #RobL
-            ('updateSelectedPodcast', self.on_update_selected_podcast),                                 #RobL
-            ('findEpisodeSelectedPodcast', self.on_find_episode_selected_podcast),                      #RobL
-            # 'Edit podcast settings' - defined in manual_entry_controller below                        #RobL
-            # 'Add new podcast manually' - defined in manual_entry_controller below                     #RobL
-            # 'Add new episode manually' - defined in manual_entry_controller below                     #RobL
-            # 'Add multiple episodes manually' - defined in manual_entry_controller below               #RobL
-            # 'allEpisodesNewSelectedPodcast' - defined above                                           #RobL
-            # 'allEpisodesLockSelectedPodcast' - defined above                                          #RobL
-            # 'autoLockNewEpisodesSelectedPodcast' - defined above                                      #RobL
-            ('undeleteEpisodesSelectedPodcast', self.on_undelete_episodes_selected_podcast),            #RobL
-            ('removeSelectedPodcast', self.on_remove_selected_podcast),                                 #RobL
-            ('removeDeletedEpisodesSelectedPodcast', self.on_remove_deleted_episodes_selected_podcast), #RobL
-            ('deleteExpiredEpisodesSelectedPodcast', self.on_delete_expired_episodes_selected_podcast), #RobL
-            ('openPodcastDownloadFolder', self.on_open_podcast_download_folder),                        #RobL            
-            ('refreshPodcastImage', self.on_refresh_podcast_image),                                     #RobL - Formerly on_itemRefreshCover_activate
+            ('showPodcastDetails', self.on_show_podcast_details),
+            ('updateSelectedPodcast', self.on_update_selected_podcast),
+            ('findEpisodeSelectedPodcast', self.on_find_episode_selected_podcast),
+            # 'Edit podcast settings' - defined in manual_entry_controller below
+            # 'Add new podcast manually' - defined in manual_entry_controller below
+            # 'Add new episode manually' - defined in manual_entry_controller below
+            # 'Add multiple episodes manually' - defined in manual_entry_controller below
+            # 'allEpisodesNewSelectedPodcast' - defined above
+            # 'allEpisodesLockSelectedPodcast' - defined above
+            # 'autoLockNewEpisodesSelectedPodcast' - defined above
+            ('undeleteEpisodesSelectedPodcast', self.on_undelete_episodes_selected_podcast),
+            ('removeSelectedPodcast', self.on_remove_selected_podcast),
+            ('removeDeletedEpisodesSelectedPodcast', self.on_remove_deleted_episodes_selected_podcast),
+            ('deleteExpiredEpisodesSelectedPodcast', self.on_delete_expired_episodes_selected_podcast),
+            ('openPodcastDownloadFolder', self.on_open_podcast_download_folder),
+            ('refreshPodcastImage', self.on_refresh_podcast_image),  #RobL - Formerly on_itemRefreshCover_activate
             # -----------------------------------------------------------------
             # Menubar -> All Podcasts (actions for managing EXISTING podacasts)
             # -----------------------------------------------------------------
-            ('checkForNewEpisodesAllPodcasts', self.on_check_for_new_episodes_all_podcasts),            #RobL
-            ('downloadNewEpisodesAllPodcasts', self.on_download_new_episodes_all_podcasts),             #RobL
-            ('updateAllPodcasts', self.on_update_all_podcasts),                                         #RobL
-            ('deleteExpiredEpisodesAllPodcasts', self.on_delete_expired_episodes_all_podcasts),         #RobL
-            ('deleteOldEpisodesAllPodcasts', self.on_delete_old_episodes_all_podcasts),                 #RobL
-            ('deleteMultiplePodcasts', self.on_delete_multiple_podcasts),                               #RobL
-            ('findPodcast', self.on_find_podcast),                                                      #RobL
+            ('checkForNewEpisodesAllPodcasts', self.on_check_for_new_episodes_all_podcasts),
+            ('downloadNewEpisodesAllPodcasts', self.on_download_new_episodes_all_podcasts),
+            ('updateAllPodcasts', self.on_update_all_podcasts),
+            ('deleteExpiredEpisodesAllPodcasts', self.on_delete_expired_episodes_all_podcasts),
+            ('deleteOldEpisodesAllPodcasts', self.on_delete_old_episodes_all_podcasts),
+            ('deleteMultiplePodcasts', self.on_delete_multiple_podcasts),
+            ('findPodcast', self.on_find_podcast),
             # ------------------------------------------------------------
             # Menubar -> Episodes (actions for managing EXISTING episodes)
             # ------------------------------------------------------------
@@ -598,10 +601,10 @@ class gPodder(BuilderWidget):
             ('moveDown', self.on_move_selected_items_down),
             ('remove', self.on_remove_from_download_list),
             ('delete', self.on_delete_activate),
-            #'episodeNew' - defined above                                                               #RobL
-            #'episodeLock' - defined above                                                              #RobL
+            #'episodeNew' - defined above
+            #'episodeLock' - defined above
             ('openEpisodeDownloadFolder', self.on_open_episode_download_folder),
-            ('selectPodcastOfEpisode', self.on_select_podcast_of_episode),                              # Formerly 'selectChannel' / select_channel_of_episode_action 
+            ('selectPodcastOfEpisode', self.on_select_podcast_of_episode),  #RobL - Formerly 'selectChannel'
             ('toggleShownotes', self.on_shownotes_selected_episodes),
             ('saveEpisodes', self.on_save_episodes_activate),
             ('bluetoothEpisodes', self.on_bluetooth_episodes_activate),
@@ -616,16 +619,16 @@ class gPodder(BuilderWidget):
             # Menubar -> Extras
             # -----------------
             ('sync', self.on_sync_to_device_activate),
-            ('databaseIntegrityCheck', self.on_database_integrity_check),  #RobL
+            ('databaseIntegrityCheck', self.on_database_integrity_check),
         ]
-        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         for name, callback in action_defs:
             action = Gio.SimpleAction.new(name, None)
             action.connect('activate', callback)
             g.add_action(action)
 
-        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # Add actions to support manual entry of podcasts and episodes.
         # This is done using the manual-entry controller (defined in manual_entry.py),
         # which is separate from the create_actions activities performed above.
@@ -638,9 +641,9 @@ class gPodder(BuilderWidget):
             self.manual_entry_controller.install_actions(g)
         else:
             logger.warning('manual_entry_controller not available, skipping installation of its actions')
-        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
         # This section defines references to menu items that need to be updated
         # based on whether the menu item (aka action) can be taken based on the
         # state of the system. For example, if no podcast is selected, certain
@@ -694,10 +697,10 @@ class gPodder(BuilderWidget):
         self.episode_lock_menuitem = g.lookup_action('episodeLock')  # Formerly episode_lock_action
 
         self.open_episode_download_folder_menuitem = g.lookup_action('openEpisodeDownloadFolder')   # Formerly open_episode_download_folder_action
-        self.select_podcast_of_episode_menuitem = g.lookup_action('selectPodcastOfEpisode')         # Formerly 'selectChannel' / select_channel_of_episode_action
+        self.select_podcast_of_episode_menuitem = g.lookup_action('selectPodcastOfEpisode')         # Formerly select_channel_of_episode_action
 
         self.bluetooth_episodes_action = g.lookup_action('bluetoothEpisodes')
-        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         self.bluetooth_episodes_action.set_enabled(self.bluetooth_available)
 
@@ -713,7 +716,7 @@ class gPodder(BuilderWidget):
             self._for_each_task_set_status(selected_tasks, download.DownloadTask.QUEUED)
         self.resume_all_infobar.set_revealed(False)
 
-    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # find_partial_downloads has been modified to show progress indicator
     # updates using the main startup progress indicator when its available.
     # When it is not available, it will create its own progress indicator
@@ -792,9 +795,9 @@ class gPodder(BuilderWidget):
             final_progress_callback,
             finish_progress_callback
         )
-    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     def find_partial_downloads_deferred(self):
         """Start the partial-download scan after the UI has initialized.
 
@@ -803,9 +806,9 @@ class gPodder(BuilderWidget):
         logger.info('Deferred partial-download scan starting...')
         util.run_in_background(self.find_partial_downloads)
         return False
-    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Added this method to defer the check of download folders until after the
     # UI has started, to avoid blocking startup with potentially long-running
     # file system operations. This preserves the old behavior of detecting
@@ -860,9 +863,9 @@ class gPodder(BuilderWidget):
 
         util.run_in_background(worker)
         return False
-    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Loads a custom CSS stylesheet to style the selected row in the treeviews,
     # since the default selection styling is not very visible in the dark theme.
     # This is done by creating a Gtk.CssProvider, loading the CSS from a byte
@@ -881,9 +884,9 @@ class gPodder(BuilderWidget):
             )
 
         self.gpodder_plus_css_provider.load_from_data(css)
-    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Helper functions for managing the application status text at the bottom
     # of the main window.
     def set_app_status(self, message=None):
@@ -949,7 +952,7 @@ class gPodder(BuilderWidget):
 
         self.set_app_status(status)
         return False
-    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def in_downloads_list(self):
         return self.wNotebook.get_current_page() == 1
@@ -1147,20 +1150,21 @@ class gPodder(BuilderWidget):
         ev = Dummy(x=x, y=y, button=3)
         return self.treeview_downloads_show_context_menu(ev)
 
-    def on_find_podcast(self, action, param):  #RobL
+    def on_find_podcast(self, action, param):  #RobL - Split *args to action, param
         if self._search_podcasts:
             self._search_podcasts.show_search()
 
     def init_podcast_list_treeview(self):
         size = cake_size_from_widget(self.treeChannels) * 2
         scale = self.treeChannels.get_scale_factor()
-        self.treeChannels.set_name('podcast-list')  #RobL
+        self.treeChannels.set_name('podcast-list')  #RobL - Set widget name for clarity
         self.podcast_list_model.set_max_image_size(size, scale)
         # Set up podcast channel tree view widget
         column = Gtk.TreeViewColumn('')
 
-        #RobL--v
-        # Helper function to set the background color of a podcast name cell based on the value in the model.
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Helper function to set the background color of a podcast name cell
+        # based on the value in the model.
         def set_podcast_namecell_background(column, cell, tree_model, tree_iter, data=None):
             # treeChannels uses a GtkTreeModelFilter, so convert the filtered iter
             # back to the underlying PodcastListModel iter before reading columns.
@@ -1178,7 +1182,7 @@ class gPodder(BuilderWidget):
                 cell.set_property('cell-background-set', True)
             else:
                 cell.set_property('cell-background-set', False)
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         iconcell = Gtk.CellRendererPixbuf()
         iconcell.set_property('width', size + 10)
@@ -1192,6 +1196,8 @@ class gPodder(BuilderWidget):
         namecell.set_property('ellipsize', Pango.EllipsizeMode.END)
         column.pack_start(namecell, True)
         column.add_attribute(namecell, 'markup', PodcastListModel.C_DESCRIPTION)
+
+        #RobL - Set background color of podcast name cell based on model value
         column.set_cell_data_func(namecell, set_podcast_namecell_background)  #RobL
 
         iconcell = Gtk.CellRendererPixbuf()
@@ -1300,7 +1306,7 @@ class gPodder(BuilderWidget):
         if self.config.ui.gtk.search_always_visible:
             self._search_podcasts.show_search(grab_focus=False)
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Formerly on_find_episode_activate renamed to on_find_episode_selected_podcast
     def on_find_episode_selected_podcast(self, *args):
         """Show the episode search entry and focus it, so the user can start typing to
@@ -1308,7 +1314,7 @@ class gPodder(BuilderWidget):
 
         if self._search_episodes:
             self._search_episodes.show_search()
-    #RobL--v
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def set_episode_list_column(self, index, new_value):
         mask = (1 << index)
@@ -1354,7 +1360,7 @@ class gPodder(BuilderWidget):
             self.releasecell.set_property('alignment', Pango.Alignment.LEFT)
 
     def init_episode_list_treeview(self):
-        self.treeAvailable.set_name('episode-list')  #RobL
+        self.treeAvailable.set_name('episode-list')  #RobL - Set widget name for clarity
         self.episode_list_model.set_view_mode(self.config.ui.gtk.episode_list.view_mode)
 
         # Set up episode context menu
@@ -1908,14 +1914,18 @@ class gPodder(BuilderWidget):
         elif name == 'ui.gtk.episode_list.columns':
             self.update_episode_list_columns_visibility()
         elif name == 'ui.gtk.color_scheme':
-            dark = (new_value == 'dark')                            #RobL - Supports toggling dark/light mode
-            action = self.gPodder.lookup_action('viewDarkMode')     #RobL
-            if action is not None:                                  #RobL
-                action.set_state(GLib.Variant.new_boolean(dark))    #RobL
-            if new_value == 'system':                               #RobL
-                self.application.read_portal_color_scheme()         #RobL
-            else:                                                   #RobL
-                self.application.set_dark_mode(dark)                #RobL
+            #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+            # Support toggling between dark & light mode.
+            dark = (new_value == 'dark')
+            action = self.gPodder.lookup_action('viewDarkMode')
+            if action is not None:
+                action.set_state(GLib.Variant.new_boolean(dark))
+            if new_value == 'system':
+                self.application.read_portal_color_scheme()
+            else:
+                self.application.set_dark_mode(dark)
+            #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+
         elif name == 'limit.downloads.concurrent_max':
             # Do not allow value to be set below 1
             if new_value < 1:
@@ -1981,12 +1991,16 @@ class gPodder(BuilderWidget):
                 error_str = model.get_value(iterator, PodcastListModel.C_ERROR)
                 if error_str:
                     error_str = _('Feedparser error: %s') % html.escape(error_str.strip())
-                    #error_str = '<span foreground="#ff0000">%s</span>' % error_str #RobL
-                    error_str = (                                                   #RobL
-                        f'<span foreground="{GUITheme.color("ERROR_FG")}">'         #RobL
-                        f'{error_str}'                                              #RobL
-                        f'</span>'                                                  #RobL
-                    )                                                               #RobL
+                    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+                    # Use GUITheme values to show feedparser errors rather than
+                    # using hard-coded values.
+                    #error_str = '<span foreground="#ff0000">%s</span>' % error_str
+                    error_str = (
+                        f'<span foreground="{GUITheme.color("ERROR_FG")}">'
+                        f'{error_str}'
+                        f'</span>'
+                    )
+                    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
                 box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
                 box.set_border_width(5)
@@ -2311,9 +2325,9 @@ class gPodder(BuilderWidget):
             self.downloads_popover.show()
             return True
 
-
-    #RobL--v
-    # Remove deleted episodes from the selected podcast instead of displaying them as deleted.
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+    # Remove deleted episodes from the selected podcast instead of displaying
+    # them as deleted.
     def on_remove_deleted_episodes_selected_podcast(self, action, param):
         """Find and remove episodes marked as deleted rather than displaying them as deleted."""
 
@@ -2338,9 +2352,9 @@ class gPodder(BuilderWidget):
             self.update_podcast_list_model({self.active_channel.url})
             self.update_episode_list_model()
             self.update_episode_list_icons(update_all=True)
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     def on_delete_expired_episodes_selected_podcast(self, action, param):
         """Find and remove expired episodes and ask before deleting media files."""
 
@@ -2385,9 +2399,9 @@ class gPodder(BuilderWidget):
         self.delete_episode_list(old_episodes, confirm=True)
 
         return True
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # New feature: Remove expired episodes from ALL PODCASTS instead of just the selected podcast.
     def on_delete_expired_episodes_all_podcasts(self, action, param):
         """Find and remove expired episodes and ask before deleting media files."""
@@ -2414,9 +2428,9 @@ class gPodder(BuilderWidget):
         self.delete_episode_list(old_episodes, confirm=True)
 
         return True
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # New feature: Undelete episodes in the selected podcast instead of marking them as deleted.
     def on_undelete_episodes_selected_podcast(self, action, param):
         """Find deleted episodes in the selected podcast and mark them as undeleted."""
@@ -2442,9 +2456,9 @@ class gPodder(BuilderWidget):
 
         self.update_podcast_list_model(selected=True)
         self.update_episode_list_icons(update_all=True)
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Formerly on_open_download_folder - now on_open_podcast_download_folder
     def on_open_podcast_download_folder(self, action, param):
         """Opens the download folder for the selected podcast."""
@@ -2456,9 +2470,9 @@ class gPodder(BuilderWidget):
             return False
 
         util.gui_open(self.active_channel.save_dir, gui=self)
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    def on_open_episode_download_folder(self, action, param):
+    def on_open_episode_download_folder(self, action, param):  #RobL - Changed (unused1=None, unused2=None) to (action, param)
         episodes = self.get_selected_episodes()
         assert len(episodes) == 1
         try:
@@ -2483,7 +2497,7 @@ class gPodder(BuilderWidget):
         except GLib.GError:
             util.gui_open(episodes[0].parent.save_dir, gui=self)
 
-    def on_select_podcast_of_episode(self, action, param):  # RobL - formerly on_select_channel_of_episode
+    def on_select_podcast_of_episode(self, action, param):  # RobL - Formerly on_select_channel_of_episode
         episodes = self.get_selected_episodes()
         assert len(episodes) == 1
         channel = episodes[0].parent
@@ -2507,6 +2521,8 @@ class gPodder(BuilderWidget):
 
         if event is None or event.button == 3:
 
+            #RobL - Moved previous code to the following function to support
+            #RobL - dynamic context menu items from extensions.
             self.set_podcast_menu_item_actions()  #RobL
 
             self.channel_context_menu_helper.replace_entries([
@@ -2707,8 +2723,8 @@ class gPodder(BuilderWidget):
                 self.sendto_menu.remove_all()
 
             # New and Archive state
-            self.episode_new_menuitem.change_state(GLib.Variant.new_boolean(any_new))
-            self.episode_lock_menuitem.change_state(GLib.Variant.new_boolean(any_locked))
+            self.episode_new_menuitem.change_state(GLib.Variant.new_boolean(any_new))      #RobL - Formerly episode_new_action
+            self.episode_lock_menuitem.change_state(GLib.Variant.new_boolean(any_locked))  #RobL - Formerly episode_lock_action
 
             self.allow_tooltips(False)
 
@@ -2717,7 +2733,10 @@ class gPodder(BuilderWidget):
             self.episodes_popover.show()
             return True
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+    # This method supports dynamic context menu items based on whether a real
+    # podcast is selected or not (e.g. disable menu items when "All episodes"
+    # or no podcast is selected).
     def set_podcast_menu_item_actions(self):
 
         # If a real podcast is not selected, disable all menu item actions.
@@ -2770,9 +2789,10 @@ class gPodder(BuilderWidget):
         #logger.warning('all_episodes_are_locked=%s' % all_episodes_are_locked)
         self.all_episodes_lock_selected_podcast_menuitem.change_state(
             GLib.Variant.new_boolean(all_episodes_are_locked))
-    #RobL--v
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    def set_episode_menu_item_actions(self, open_instead_of_play=False, can_play=False,  #RobL - Renamed from set_episode_actions
+    #RobL - Renamed from set_episode_actions - renamed to better reflect its purpose.
+    def set_episode_menu_item_actions(self, open_instead_of_play=False, can_play=False,
                                       can_force=False, can_download=False, can_pause=False,
                                       can_cancel=False, can_delete=False, can_lock=False,
                                       is_episode_selected=False):
@@ -2815,12 +2835,12 @@ class gPodder(BuilderWidget):
         self.delete_action.set_enabled(can_delete)
         #self.toggle_episode_new_action.set_enabled(is_episode_selected)  #RobL - replaced by episode_new_menuitem (see context menu below)
         #self.toggle_episode_lock_action.set_enabled(can_lock)  #RobL - replaced by episode_lock_menuitem (see context menu below)
-        self.open_episode_download_folder_menuitem.set_enabled(len(episodes) == 1)
-        self.select_podcast_of_episode_menuitem.set_enabled(len(episodes) == 1)
+        self.open_episode_download_folder_menuitem.set_enabled(len(episodes) == 1) #RobL - Formerly open_episode_download_folder_action
+        self.select_podcast_of_episode_menuitem.set_enabled(len(episodes) == 1)    #RobL - Formerly select_channel_of_episode_action
 
         # Episodes context menu
-        self.episode_new_menuitem.set_enabled(is_episode_selected)
-        self.episode_lock_menuitem.set_enabled(can_lock)
+        self.episode_new_menuitem.set_enabled(is_episode_selected)  #RobL - Formerly episode_new_action
+        self.episode_lock_menuitem.set_enabled(can_lock)            #RobL - Formerly episode_lock_action
 
     def set_title(self, new_title):
         self.default_title = new_title
@@ -2935,6 +2955,7 @@ class gPodder(BuilderWidget):
            located in the menu bar and context menus) when a change occurs to and
            episode or podcast. Note: This does not play or download any episodes
            despite the name."""
+        #RobL - Added method description above to clarify purpose of method.
         if not self.in_downloads_list():
             (open_instead_of_play, can_play, can_preview, can_download,
              can_pause, can_cancel, can_delete, can_lock) = (False,) * 8
@@ -2964,10 +2985,10 @@ class gPodder(BuilderWidget):
                     can_delete = can_delete or episode.can_delete()
                     can_lock = can_lock or episode.can_lock()
 
-            self.set_episode_menu_item_actions(open_instead_of_play, can_play, False, can_download, #RobL - renamed from set_episode_actions
+            self.set_episode_menu_item_actions(open_instead_of_play, can_play, False, can_download, #RobL - Formerly set_episode_actions
                                                can_pause, can_cancel, can_delete, can_lock,
                                                selection.count_selected_rows() > 0)
-            self.set_podcast_menu_item_actions()  #RobL
+            self.set_podcast_menu_item_actions()  #RobL - Added call to update podcast menu items based on episode selection
 
             return (open_instead_of_play, can_play, can_preview, can_download,
                     can_pause, can_cancel, can_delete, can_lock)
@@ -3001,9 +3022,9 @@ class gPodder(BuilderWidget):
             else:
                 can_force = False
 
-            self.set_episode_menu_item_actions(False, False, can_force, can_queue,  #RobL - Renamed from set_episode_actions
+            self.set_episode_menu_item_actions(False, False, can_force, can_queue,  #RobL - Formerly set_episode_actions
                                                can_pause, can_cancel, can_remove, False, False)
-            self.set_podcast_menu_item_actions()  #RobL
+            self.set_podcast_menu_item_actions()  #RobL - Added call to update podcast menu items based on episode selection
 
             return (False, False, False, can_queue, can_pause, can_cancel,
                     can_remove, False)
@@ -3030,8 +3051,8 @@ class gPodder(BuilderWidget):
             remaining_seconds = remaining_seconds - 3600
         util.idle_timeout_add(remaining_seconds * 1000, self.refresh_episode_dates)
 
-    def update_podcast_list_model(self, urls=None, selected=False, select_url=None,  #RobL
-            sections_changed=False, select_first=False):                             #RobL
+    def update_podcast_list_model(self, urls=None, selected=False, select_url=None,
+            sections_changed=False, select_first=False):  #RobL - Added select_first parameter
         """Update the podcast list treeview model.
 
         If urls is given, it should list the URLs of each
@@ -3110,9 +3131,9 @@ class gPodder(BuilderWidget):
             # Update the podcast list model with new channels
             self.podcast_list_model.set_channels(self.db, self.config, self.channels)
 
-            #RobL--v
-            # Changes original behavior of automatically selecting the first podcast
-            # in the list.
+            #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+            # Changes original behavior of automatically selecting the first
+            # podcast in the list.
             try:
                 selected_iter = None
 
@@ -3127,7 +3148,7 @@ class gPodder(BuilderWidget):
                         pos = model.iter_next(pos)
 
                 # Old behavior: if no specific podcast was requested, select the first row.
-                # New startup behavior can pass select_first=False to leave nothing selected.
+                # New behavior: can pass select_first=False to leave nothing selected.
                 elif select_first:
                     selected_iter = model.get_iter_first()
 
@@ -3141,7 +3162,7 @@ class gPodder(BuilderWidget):
 
             except:
                 logger.error('Cannot select podcast in list', exc_info=True)
-            #RobL--^
+            #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def on_episode_list_filter_changed(self, has_episodes):
         self.play_or_download()
@@ -3162,6 +3183,7 @@ class gPodder(BuilderWidget):
         else:
             self.episode_list_model.clear()
 
+        #RobL - Update episode count in status bar when episode list is updated
         self.update_episode_count_status()  #RobL
 
     def offer_new_episodes(self, channels=None):
@@ -3406,6 +3428,7 @@ class gPodder(BuilderWidget):
         if not self.application.want_headerbar:
             self.btnUpdateFeeds.show()
 
+        #RobL - Enable menu items after feed update.
         self.update_all_feeds_menuitem.set_enabled(True)     #RobL
         self.update_all_podcasts_menuitem.set_enabled(True)  #RobL
 
@@ -3424,9 +3447,10 @@ class gPodder(BuilderWidget):
                     _('No network connection'), important=True)
             return
 
-        #RobL--v
-        # If channels is None, all podcasts with updates enabled are checked for new episodes.
-        # If channels is a list of podcasts, only those podcasts are checked.
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # If channels is None, all podcasts with updates enabled are checked
+        # for new episodes. If channels is a list of podcasts, only the
+        # podcasts in that list are checked.
         updating_all_podcasts = channels is None
         if updating_all_podcasts:
             # Only update podcasts for which updates are enabled.
@@ -3455,13 +3479,21 @@ class gPodder(BuilderWidget):
                    'Checking %(count)d selected podcasts for new episodes',
                    count) % {'count': count}
             )
-        #RobL--v
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         # Fix URLs if mygpo has rewritten them
         self.rewrite_urls_mygpo()
 
-        self.update_all_feeds_menuitem.set_enabled(False)     #RobL
-        self.update_all_podcasts_menuitem.set_enabled(False)  #RobL
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Commented out the following lines because channels is already set
+        # to the correct list of channels to be updated (see above).
+        #if channels is None:
+            # Only update podcasts for which updates are enabled
+            #channels = [c for c in self.channels if not c.pause_subscription]
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+
+        self.update_all_feeds_menuitem.set_enabled(False)     #RobL - Formerly update_action
+        self.update_all_podcasts_menuitem.set_enabled(False)  #RobL - Formerly update_channel_action
 
         self.feed_cache_update_cancelled = False
         self.btnCancelFeedUpdate.show()
@@ -3470,6 +3502,7 @@ class gPodder(BuilderWidget):
         self.hboxUpdateFeeds.show_all()
         self.btnUpdateFeeds.hide()
 
+        #count = len(channels) #RobL - count is already set above
         text = N_('Updating %(count)d feed...', 'Updating %(count)d feeds...',
                   count) % {'count': count}
 
@@ -3572,7 +3605,7 @@ class gPodder(BuilderWidget):
                     self.feed_cache_update_cancelled = True
                     self.btnCancelFeedUpdate.show()
                     self.btnCancelFeedUpdate.set_sensitive(True)
-                    self.update_all_feeds_action.set_enabled(True)  #RobL
+                    self.update_all_feeds_action.set_enabled(True)  #RobL - Formerly update_action
                     self.btnCancelFeedUpdate.set_image(Gtk.Image.new_from_icon_name('edit-clear', Gtk.IconSize.BUTTON))
                 else:
                     episodes = downloadable_episodes
@@ -3605,7 +3638,7 @@ class gPodder(BuilderWidget):
                             self.pbFeedUpdate.set_text(message)
 
                     self.show_update_feeds_buttons()
-                    self.clear_app_status()  #RobL
+                    self.clear_app_status()  #RobL - Clear status message after feed update is complete
 
             util.idle_add(update_feed_cache_finish_callback, new_episodes)
 
@@ -3647,7 +3680,7 @@ class gPodder(BuilderWidget):
 
     def close_gpodder(self):
         """Clean everything and exit properly."""
-        logger.info('close_gpodder: starting shutdown')  #RobL
+        logger.info('close_gpodder: starting shutdown')  #RobL - Added logging to track shutdown issues
 
         # Cancel any running background updates of the episode list model
         self.episode_list_model.background_update = None
@@ -3661,7 +3694,7 @@ class gPodder(BuilderWidget):
             Gtk.main_iteration()
 
         self.core.shutdown()
-        logger.info('close_gpodder: core shutdown complete')  #RobL
+        logger.info('close_gpodder: core shutdown complete')  #RobL - Added logging to track shutdown issues
 
         self.application.remove_window(self.gPodder)
 
@@ -3750,13 +3783,13 @@ class gPodder(BuilderWidget):
 
         return True
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Formerly on_itemRemoveOldEpisodes_activate - now on_delete_old_episodes_all_podcasts
     def on_delete_old_episodes_all_podcasts(self, action, param):
         """Deletes episodes marked as old across all podcasts."""
 
         self.show_delete_episodes_window()
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def show_delete_episodes_window(self, channel=None):
         """Offer deletion of episodes.
@@ -3816,7 +3849,7 @@ class gPodder(BuilderWidget):
     # new/old status and locked/unlocked status have been moved to his section
     # for easier maintenance.
 
-    #==================== New/Old Episodes -- Begin ====================
+    #======================= New/Old Episodes -- Begin ========================
     def on_selected_episodes_new(self, action, *params):
         """Marks selected episodes as new or old based on the state of the menu item action."""
 
@@ -3931,9 +3964,9 @@ class gPodder(BuilderWidget):
         self.channels_popover.popdown()
         return True
 
-    #==================== New/Old Episodes -- End ====================
+    #======================= New/Old Episodes -- End ==========================
 
-    #==================== Lock/Unlock Episodes -- Begin ====================
+    #===================== Lock/Unlock Episodes -- Begin ======================
     def on_selected_episodes_lock(self, action, *params):
         """Determines the lock state of the selected episodes and toggles the
            lock status to the alternate state."""
@@ -4027,27 +4060,28 @@ class gPodder(BuilderWidget):
         self.channels_popover.popdown()
         return True
 
-    #==================== Lock/Unlock Episodes -- End ====================
+    #====================== Lock/Unlock Episodes -- End =======================
 
-    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Formerly on_itemUpdateChannelsAll_activate -- now on_update_all_podcasts
-    # Separated from on_itemUpdateChannel_activate to be able to update the feed cache for the
-    # "All episodes" proxy without updating all feeds.
-    # Discussion in bug 1711 - we need to update the feed cache when the "All episodes" proxy
-    # is selected, because it might have been selected before the feed update and thus
-    # not show new episodes until the next update.
+    # Separated from on_itemUpdateChannel_activate to be able to update the
+    # feed cache for the "All episodes" proxy without updating all feeds.
+    # Discussion in bug 1711 - we need to update the feed cache when the
+    # "All episodes" proxy is selected, because it might have been selected
+    # before the feed update and thus not show new episodes until the next update.
     def on_update_all_podcasts(self, action, param):
         # Dirty hack to check for "All episodes" (see gpodder.gtkui.model) across all podcasts.
         if getattr(self.active_channel, 'ALL_EPISODES_PROXY', False):
             self.update_feed_cache()
-    #RobL--v
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Formerly on_itemUpdateChannel_activate -- now on_update_selected_podcast
-    # Dedicated this option to only updating the feed cache for the currently selected podcast,
-    # to be able to update the feed cache for a section without updating all feeds.
+    # Dedicated this option to only updating the feed cache for the currently
+    # selected podcast, to be able to update the feed cache for a section
+    # without updating all feeds.
     def on_update_selected_podcast(self, action, param):
         if self.active_channel is None:
             title = _('No podcast selected')
@@ -4056,9 +4090,9 @@ class gPodder(BuilderWidget):
             return
 
         self.update_feed_cache(channels=[self.active_channel])
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Formerly on_itemUpdate_activate -- now on_check_for_new_episodes_all_podcasts
     def on_check_for_new_episodes_all_podcasts(self, action=None, param=None):
         """Checks all podcasts for new episodes."""
@@ -4097,7 +4131,7 @@ class gPodder(BuilderWidget):
             return False
 
         util.idle_add(start_check_for_new_episodes)
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def download_episode_list_paused(self, episodes, hide_progress=False):
         self.download_episode_list(episodes, True, hide_progress=hide_progress)
@@ -4269,7 +4303,7 @@ class gPodder(BuilderWidget):
                 _config=self.config,
                 show_notification=False)
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Formerly on_itemDownloadAllNew_activate - now on_download_new_episodes_all_podcasts
     def on_download_new_episodes_all_podcasts(self, action, param):
         """Downloads all new episodes for all podcasts."""
@@ -4277,7 +4311,7 @@ class gPodder(BuilderWidget):
         if not self.offer_new_episodes():
             self.show_message(_('Please check for new episodes later.'),
                     _('No new episodes available'))
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def get_new_episodes(self, channels=None):
         return [e for c in channels or self.channels for e in
@@ -4287,7 +4321,7 @@ class gPodder(BuilderWidget):
         """Called after the sync process is finished."""  # noqa: D401
         self.db.commit()
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Allows user to easily toggle between a dark or light theme UI.
     def on_toggle_view_dark_mode(self, action, param):
         old_state = action.get_state().get_boolean()
@@ -4298,7 +4332,7 @@ class gPodder(BuilderWidget):
         self.config.ui.gtk.color_scheme = 'dark' if new_state else 'light'
 
         action.set_state(GLib.Variant.new_boolean(new_state))
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def on_show_toolbar(self, action, param):  #RobL - Formerly on_itemShowToolbar_activate
         state = action.get_state()
@@ -4414,7 +4448,7 @@ class gPodder(BuilderWidget):
         self._add_podcast_dialog = gPodderAddPodcast(self.gPodder,
                 add_podcast_list=self.add_podcast_list)
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Formerly on_itemEditChannel_activate -- now on_show_podcast_details
     def on_show_podcast_details(self, *args):
         """Shows details for the currently selected podcast."""
@@ -4432,9 +4466,9 @@ class gPodder(BuilderWidget):
                 sections={c.section for c in self.channels},
                 clear_cover_cache=self.podcast_list_model.clear_cover_cache,
                 _config=self.config)
-    #RobL--v
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Formerly on_itemMassUnsubscribe_activate -- now on_delete_multiple_podcasts
     def on_delete_multiple_podcasts(self, action, param):
         """Deletes multiple selected podcasts at once."""
@@ -4453,7 +4487,7 @@ class gPodder(BuilderWidget):
                 ok_button=_('_Delete'),
                 callback=self.remove_podcast_list,
                 _config=self.config)
-    #RobL--v
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def remove_podcast_list(self, channels, confirm=True):
         if not channels:
@@ -4526,10 +4560,11 @@ class gPodder(BuilderWidget):
             # The remaining stuff is to be done in the GTK main thread
             util.idle_add(finish_deletion, select_url)
 
-    def on_refresh_podcast_image(self, widget, *args):  #Robl - Formerly on_itemRefreshCover_activate
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+    # Formerly on_itemRefreshCover_activate
+    def on_refresh_podcast_image(self, widget, *args):  
         assert self.active_channel is not None
 
-        # RobL--v
         self.active_channel.cover_thumb = None
         self.active_channel.save()
         self.podcast_list_model.clear_cover_cache(self.active_channel.url)
@@ -4544,9 +4579,9 @@ class gPodder(BuilderWidget):
                 self.active_channel,
                 custom_url=False
             )
-        # RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    # RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Formerly on_itemRemoveChannel_activate -- now on_remove_selected_podcast
     def on_remove_selected_podcast(self, action, param):
         if self.active_channel is None:
@@ -4556,7 +4591,7 @@ class gPodder(BuilderWidget):
             return
 
         self.remove_podcast_list([self.active_channel])
-    # RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def get_opml_filter(self):
         flt = Gtk.FileFilter()
@@ -4680,10 +4715,10 @@ class gPodder(BuilderWidget):
         # double-click action of the podcast list or enter
         self.treeChannels.set_cursor(path)
 
-        # show podcast details
+        #RobL - show podcast details (formerly open channel settings)
         channel = self.get_selected_channels()[0]
         if channel and not isinstance(channel, PodcastChannelProxy):
-            self.on_show_podcast_details()  #RobL
+            self.on_show_podcast_details()  #RobL - formerly on_itemEditChannel_activate
 
     def get_selected_channels(self):
         """Get a list of selected channels from treeChannels."""
@@ -4705,12 +4740,13 @@ class gPodder(BuilderWidget):
                 return
 
             # Dirty hack to check for "All episodes" or a section (see gpodder.gtkui.model)
-            #if isinstance(self.active_channel, PodcastChannelProxy):
-            #    self.set_podcast_menu_item_actions()  #RobL
+            #RobL - commented out to allow showing podcast details for "All episodes" and section items
+            #if isinstance(self.active_channel, PodcastChannelProxy):   #RobL
+            #    self.set_podcast_menu_item_actions()                   #RobL
         else:
             self.active_channel = None
 
-        self.set_podcast_menu_item_actions()  #RobL
+        self.set_podcast_menu_item_actions()  #RobL - updates available menu item actions
 
         self.update_episode_list_model()
 
@@ -4729,6 +4765,8 @@ class gPodder(BuilderWidget):
 
     def on_playback_selected_episodes(self, *params):
         self.playback_episodes(self.get_selected_episodes())
+
+    #RobL - Removed on_episode_new_activate
 
     def on_shownotes_selected_episodes(self, *params):
         episodes = self.get_selected_episodes()
@@ -4794,7 +4832,7 @@ class gPodder(BuilderWidget):
         selected_tasks, x, x, x, x, x = self.downloads_list_get_selection()
         self._for_each_task_set_status(selected_tasks, None, False)
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Changed default behavior of double-clicking an episode in the episode list
     # to start playback rather than show the shownotes. Playback can still be
     # started by selecting the episode and pressing Enter or by clicking the
@@ -4805,7 +4843,7 @@ class gPodder(BuilderWidget):
         widget.grab_focus()
         widget.set_cursor(path, view_column, False)
         self.on_playback_selected_episodes(widget)
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def restart_auto_update_timer(self):
         if self._auto_update_timer_source_id is not None:
@@ -5020,7 +5058,7 @@ class gPodder(BuilderWidget):
     def _on_playback_stopped(self, _start, _end, _total, episode):
         self.episode_list_status_changed([episode])
 
-    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Routine to pause the startup indicator process for a short time
     # after each update to allow startup messages to be seen.
     def startup_pause(self, seconds):
@@ -5031,9 +5069,9 @@ class gPodder(BuilderWidget):
         time.sleep(seconds)
         while Gtk.events_pending():
             Gtk.main_iteration_do(False)
-    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
-    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Database Integrity Check Feature
     # --------------------------------
     # This is a simple database integrity check feature that can be triggered
@@ -5505,4 +5543,4 @@ class gPodder(BuilderWidget):
             lines.append('')
 
         return '\n'.join(lines)
-    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^

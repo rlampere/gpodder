@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
     <menu id="app-menu">
-        <!-- ======================================= -->
-        <!-- Menubar -> gPodder+ (application level) -->
-        <!-- ======================================== -->
+        <!-- RobL - ======================================= -->
+        <!-- RobL - Menubar -> gPodder+ (application level) -->
+        <!-- RobL - (changed menubar option from gPodder)   -->
+        <!-- RobL - ======================================= -->
         <section>
             <item>
                 <attribute name="action">app.preferences</attribute>
@@ -26,10 +27,12 @@
                 <attribute name="label" translatable="yes">Open Logs</attribute>
                 <attribute name="action">app.logs</attribute>
             </item>
+            <!-- RobL - Changed to be explicitly online help -->
             <item>
                 <attribute name="label" translatable="yes">Help (online)</attribute>
                 <attribute name="action">app.helpOnline</attribute>
             </item>
+            <!-- RobL - Added local help file option -->
             <item>
                 <attribute name="label" translatable="yes">Help (local)</attribute>
                 <attribute name="action">app.helpLocal</attribute>
@@ -46,9 +49,10 @@
         </section>
     </menu>
     <menu id="menubar">
-        <!-- ============================================= -->
-        <!-- Menubar -> Podcast (manages selected podcast) -->
-        <!-- ============================================= -->
+        <!-- RobL - ========================================================================= -->
+        <!-- RobL - Menubar -> Podcast (manages the selected podcast)                         -->
+        <!-- RobL - (multiple actions were changed from all podcasts to the selected podcast) -->
+        <!-- RobL - ========================================================================= -->
         <submenu id="menuPodcast">
             <attribute name="label" translatable="yes">_Podcast</attribute>
             <section>
@@ -127,10 +131,11 @@
                 </item>
             </section>
         </submenu>
-        <!-- ===================================================== -->
-        <!-- Menubar -> Episode (manages selected podcast episode) -->
-        <!-- ===================================================== -->
-        <submenu id="menuEpisodes">
+        <!-- RobL - ===================================================== -->
+        <!-- RobL - Menubar -> Episode (manages selected podcast episode) -->
+        <!-- RobL - (multiple actions were changed for selected episodes) -->
+        <!-- RobL - ===================================================== -->
+        <submenu id="menuEpisode">
             <attribute name="label" translatable="yes">_Episode</attribute>
             <section>
                 <item>
@@ -195,10 +200,11 @@
                 </item>
             </section>
         </submenu>
-        <!-- =============================================== -->
-        <!-- Menubar -> All Podcasts - (applies to podcasts) -->
-        <!-- =============================================== -->
-        <submenu id="menuEpisodes">
+        <!-- RobL - =================================================== -->
+        <!-- RobL - Menubar -> All Podcasts - (applies to all podcasts) -->
+        <!-- RobL - (menubar option added that applies to all podcasts) -->
+        <!-- RobL - =================================================== -->
+        <submenu id="menuAllPodcasts">
             <attribute name="label" translatable="yes">_All Podcasts</attribute>
             <section>
                 <item>
@@ -239,9 +245,10 @@
                 </item>
             </section>
         </submenu>
-        <!-- ==================================================================== -->
-        <!-- Menubar -> Subscriptions (adds new podcasts based on a subscription) -->
-        <!-- ==================================================================== -->
+        <!-- RobL - ==================================================================== -->
+        <!-- RobL - Menubar -> Subscriptions (adds new podcasts based on a subscription) -->
+        <!-- RobL - (menubar option moved and new actions that apply to new podcasts)    -->
+        <!-- RobL - ==================================================================== -->
         <submenu id="menuSubscriptions">
             <attribute name="label" translatable="yes">_Subscriptions</attribute>
             <section>
@@ -266,26 +273,28 @@
                 </item>
             </section>
         </submenu>
+        <!-- RobL - ==================================================== -->
+        <!-- RobL - Menubar -> Extras                                    -->
+        <!-- RobL - (added actions not specific to a podcast or episode) -->
+        <!-- RobL - ==================================================== -->
         <submenu id="menuExtras">
-            <!-- ================================================================ -->
-            <!-- Menubar -> Extras (additional options not specific to a podcast) -->
-            <!-- ================================================================ -->
             <attribute name="label" translatable="yes">E_xtras</attribute>
             <item>
                 <attribute name="action">win.sync</attribute>
                 <attribute name="label" translatable="yes">Sync to Device...</attribute>
                 <attribute name="accel">&lt;Primary&gt;s</attribute>
             </item>
-            <!-- Added database integrity check feature - RobL -->
+            <!-- RobL - Added database integrity check feature -->
             <item>
                 <attribute name="action">win.databaseIntegrityCheck</attribute>
                 <attribute name="label" translatable="yes">Database Integrity Check...</attribute>
             </item>
         </submenu>
+        <!-- RobL - ========================================================= -->
+        <!-- RobL - Menubar -> View                                           -->
+        <!-- RobL - (user options for how to view information in the UI)      -->
+        <!-- RobL - ========================================================= -->
         <submenu id="menuView">
-            <!-- ========================================================= -->
-            <!-- View - user options for how to view information in the UI -->
-            <!-- ========================================================= -->
             <attribute name="label" translatable="yes">_View</attribute>
             <section>
                 <item>
@@ -360,6 +369,7 @@
                 <item>
                     <!-- Also in 'vbox_view' page in preferences -->
                     <attribute name="action">win.viewShowEpisodeDescription</attribute>
+                    <!-- RobL - modified label from 'Episode descriptions' -->
                     <attribute name="label" translatable="yes">Show episode descriptions</attribute>
                     <attribute name="accel">&lt;Primary&gt;d</attribute>
                 </item>
@@ -382,9 +392,10 @@
         </submenu>
     </menu>
     <menu id="channels-context">
-        <!-- ============================= -->
-        <!-- Podcast - Right Click Options -->
-        <!-- ============================= -->
+        <!-- RobL - =================================== -->
+        <!-- RobL - Podcast - Right Click Options       -->
+        <!-- RobL - (multiple actions added or changed) -->
+        <!-- RobL - =================================== -->
         <section>
             <attribute name="display-hint">horizontal-buttons</attribute>
             <item>
@@ -473,9 +484,10 @@
         <!-- Extensions -->
     </menu>
     <menu id="episodes-context">
-        <!-- ============================= -->
-        <!-- Episode - Right Click Options -->
-        <!-- ============================= -->
+        <!-- RobL - =================================== -->
+        <!-- RobL - Episode - Right Click Options       -->
+        <!-- RobL - (multiple actions added or changed) -->
+        <!-- RobL - =================================== -->
         <section>
             <attribute name="display-hint">horizontal-buttons</attribute>
             <item>
@@ -488,6 +500,7 @@
                 <attribute name="label" translatable="yes">Download</attribute>
                 <attribute name="verb-icon">document-save-symbolic</attribute>
             </item>
+            <!-- Cancel -->
             <item>
                 <attribute name="action">win.delete</attribute>
                 <attribute name="label" translatable="yes">Delete</attribute>
@@ -503,11 +516,14 @@
                 <attribute name="action">win.download</attribute>
                 <attribute name="label" translatable="yes">Download</attribute>
             </item>
+            <!-- Cancel -->
             <item>
                 <attribute name="action">win.delete</attribute>
                 <attribute name="label" translatable="yes">Delete</attribute>
             </item>
         </section>
+        <!-- Extensions -->
+        <!-- Send To -->
         <section>
             <item>
                 <attribute name="action">win.episodeNew</attribute>
@@ -515,49 +531,57 @@
             </item>
             <item>
                 <attribute name="action">win.episodeLock</attribute>
+                <!-- RobL - Changed label from 'Archive' -->
                 <attribute name="label" translatable="yes">Lock</attribute>
             </item>
         </section>
         <section>
             <item>
+                <!-- RobL - Added new 'Edit Episode' option -->
                 <attribute name="action">win.manualEditEpisodeSelectedPodcast</attribute>
                 <attribute name="label" translatable="yes">Edit Episode...</attribute>
             </item>
             <item>
                 <attribute name="action">win.toggleShownotes</attribute>
+                <!-- RobL - Changed label from 'Episode details' -->
                 <attribute name="label" translatable="yes">Toggle Episode Details (show/hide)</attribute>
             </item>
             <item>
                 <attribute name="action">win.openEpisodeDownloadFolder</attribute>
+                <!-- RobL - Changed label from 'Open download folder' -->
                 <attribute name="label" translatable="yes">Open Download Folder</attribute>
             </item>
             <item>
+                <!-- RobL - Changed action from 'selectChannel' and label from 'Select channel' -->
                 <attribute name="action">win.selectPodcastOfEpisode</attribute>
                 <attribute name="label" translatable="yes">Highlight Associated Podcast</attribute>
             </item>
         </section>
     </menu>
     <menu id="episodes-context-sendto">
-        <!-- ==================================-->
-        <!-- Right Click -> Episode -> Send-To -->
-        <!-- ==================================-->
+        <!-- RobL - ==================================-->
+        <!-- RobL - Right Click -> Episode -> Send-To -->
+        <!-- RobL - ==================================-->
         <item>
             <attribute name="action">win.saveEpisodes</attribute>
+            <!-- RobL - Changed label from 'Local folder' -->
             <attribute name="label" translatable="yes">Local Folder</attribute>
         </item>
         <item>
             <attribute name="action">win.bluetoothEpisodes</attribute>
+            <!-- RobL - Changed label from 'Bluetooth device' -->
             <attribute name="label" translatable="yes">Bluetooth Device</attribute>
         </item>
     </menu>
-    <!-- ======================== -->
-    <!-- Right Click -> Downloads -->
-    <!-- ======================== -->
+    <!-- RobL - ======================== -->
+    <!-- RobL - Right Click -> Downloads -->
+    <!-- RobL - ======================== -->
     <menu id="downloads-context">
         <section>
             <attribute name="display-hint">horizontal-buttons</attribute>
             <item>
                 <attribute name="action">win.forceDownload</attribute>
+                <!-- RobL - Changed label from 'Start download now' -->
                 <attribute name="label" translatable="yes">Start Download Now</attribute>
                 <attribute name="verb-icon">document-save-symbolic</attribute>
             </item>
@@ -575,6 +599,7 @@
         <section>
             <item>
                 <attribute name="action">win.download</attribute>
+                <!-- RobL - Changed label from 'Start download now' -->
                 <attribute name="label" translatable="yes">Start Download Now</attribute>
             </item>
             <item>
@@ -589,16 +614,19 @@
         <section>
             <item>
                 <attribute name="action">win.moveUp</attribute>
+                <!-- RobL - Changed label from 'Move up' -->
                 <attribute name="label" translatable="yes">Move Up</attribute>
             </item>
             <item>
                 <attribute name="action">win.moveDown</attribute>
+                <!-- RobL - Changed label from 'Move down' -->
                 <attribute name="label" translatable="yes">Move Down</attribute>
             </item>
         </section>
         <section>
             <item>
                 <attribute name="action">win.remove</attribute>
+                <!-- RobL - Changed label from 'Remove from list' -->
                 <attribute name="label" translatable="yes">Remove From List</attribute>
             </item>
         </section>

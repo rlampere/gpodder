@@ -39,21 +39,17 @@ from gpodder.model import check_root_folder_path
 from .config import UIConfig
 from .desktop.preferences import gPodderPreferences
 from .main import gPodder
-from .model import Model, GUITheme  #RobL
+from .model import Model, GUITheme  #RobL - Added GUITheme for CSS support
 
 import gi  # isort:skip
 gi.require_version('Gtk', '3.0')  # isort:skip
 from gi.repository import GdkPixbuf, Gio, GLib, Gtk  # isort:skip
 
-# Text string processor for internationalization/localization.
-_ = gpodder.gettext
 
-# Plural-aware text string processor (1 egg, 2 eggs)
-N_ = gpodder.ngettext
-
-# Set up module-level logger.
 logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
+
+_ = gpodder.gettext
+N_ = gpodder.ngettext
 
 
 def parse_app_menu_for_accels(filename):
@@ -82,6 +78,8 @@ def parse_app_menu_for_accels(filename):
     return res
 
 #RobL--v
+# On Windows, set the AppUserModelID to ensure gPodder+ is grouped correctly
+# in the taskbar and has the correct icon.
 def set_windows_app_user_model_id():
     """Set Windows taskbar identity so gPodder+ is not grouped as python.exe."""
     if sys.platform != 'win32':
@@ -117,13 +115,18 @@ class gPodderApplication(Gtk.Application):
         action.connect('activate', self.on_quit)
         self.add_action(action)
 
-        action = Gio.SimpleAction.new('helpOnline', None)         #RobL
-        action.connect('activate', self.on_help_online_activate)  #RobL
-        self.add_action(action)                                   #RobL
+        #RobL--v
+        # Modified "Help" option to be "Help Online" and added a "Help Local"
+        # action to provide access to online documentation as well as a local
+        # PDF help file.
+        action = Gio.SimpleAction.new('helpOnline', None)
+        action.connect('activate', self.on_help_online_activate)
+        self.add_action(action)
 
-        action = Gio.SimpleAction.new('helpLocal', None)          #RobL
-        action.connect('activate', self.on_help_local_activate)   #RobL
-        self.add_action(action)                                   #RobL
+        action = Gio.SimpleAction.new('helpLocal', None)
+        action.connect('activate', self.on_help_local_activate)
+        self.add_action(action)
+        #RobL--^
 
         action = Gio.SimpleAction.new('logs', None)
         action.connect('activate', self.on_logs_activate)
@@ -198,7 +201,10 @@ class gPodderApplication(Gtk.Application):
             self.header_bar_menu_button.set_action_name('app.menu')
 
             self.header_bar_refresh_button = Gtk.Button.new_from_icon_name('view-refresh-symbolic', Gtk.IconSize.SMALL_TOOLBAR)
-            self.header_bar_refresh_button.set_action_name('win.checkForNewEpisodesAllPodcasts')  #RobL
+            #RobL--v
+            # Changed from win.updateChannel to win.checkForNewEpisodesAllPodcasts to reflect gPodder+ modifications.
+            self.header_bar_refresh_button.set_action_name('win.checkForNewEpisodesAllPodcasts')
+            #RobL--^
 
             self.menu_popover = Gtk.Popover.new_from_model(self.header_bar_menu_button, self.app_menu)
             self.menu_popover.set_position(Gtk.PositionType.BOTTOM)
@@ -210,6 +216,11 @@ class gPodderApplication(Gtk.Application):
             self.set_app_menu(self.app_menu)
 
         #RobL--v
+        # This code sets the application icon. We prefer to set it from the explicit
+        # file path in gpodder.icon_file, which works reliably in source/dev runs.
+        # If that fails (for example, in packaged/system installs where the file
+        # may not be present), we fall back to setting it from the theme icon name
+        # 'gpodder+', which should work if the icon is properly installed.
         try:
             # Prefer explicit icon file path (works reliably in source/dev runs)
             Gtk.Window.set_default_icon_from_file(gpodder.icon_file)
@@ -226,9 +237,9 @@ class gPodderApplication(Gtk.Application):
         except dbus.exceptions.DBusException as dbe:
             logger.warning('Cannot get "on the bus".', exc_info=True)
             dlg = Gtk.MessageDialog(None, Gtk.DialogFlags.MODAL, Gtk.MessageType.ERROR,
-                   Gtk.ButtonsType.CLOSE, _('Cannot start gPodder+'))
+                   Gtk.ButtonsType.CLOSE, _('Cannot start gPodder+'))  #RobL - Was "gPodder"
             dlg.format_secondary_markup(_('D-Bus error: %s') % (str(dbe),))
-            dlg.set_title('gPodder+')  #RobL
+            dlg.set_title('gPodder+')  #RobL - Was "gPodder"
             dlg.run()
             dlg.destroy()
             sys.exit(0)
@@ -252,7 +263,7 @@ class gPodderApplication(Gtk.Application):
                 None,
             )
         except Exception as e:
-            logger.warning("Name Already Claimed: %r", e, exc_info=True)  #RobL
+            logger.warning("Name Already Claimed: %r", e, exc_info=True)  #RobL - Fixed typo
         util.idle_add(self.check_root_folder_path_gui)
 
     def do_activate(self):
@@ -274,7 +285,6 @@ class gPodderApplication(Gtk.Application):
                 self.have_settings_portal = False
                 self._set_default_color_scheme('light')
                 self.set_dark_mode(self.window.config.ui.gtk.color_scheme == 'dark')
-
             else:
                 self.read_portal_color_scheme()
                 gpodder.dbus_session_bus.add_signal_receiver(
@@ -302,7 +312,7 @@ class gPodderApplication(Gtk.Application):
         settings.props.gtk_application_prefer_dark_theme = 1 if dark else 0
 
         #RobL--v
-        # Includes additions for gPodder+ CSS feature.
+        # Use the new GUITheme CSS feature to handle dark mode.
         GUITheme.set_dark_mode(dark)
 
         if self.window is not None:
@@ -353,7 +363,7 @@ class gPodderApplication(Gtk.Application):
         self.menu_popover.popup()
 
     def on_about(self, action, param):
-        dlg = Gtk.Dialog(_('About gPodder+'), self.window.gPodder,  #RobL
+        dlg = Gtk.Dialog(_('About gPodder+'), self.window.gPodder,  #RobL - Was "gPodder"
                 Gtk.DialogFlags.MODAL)
         dlg.add_button(_('_Close'), Gtk.ResponseType.OK).show()
         dlg.set_resizable(True)
@@ -364,6 +374,10 @@ class gPodderApplication(Gtk.Application):
         label = Gtk.Label(justify=Gtk.Justification.CENTER)
         label.set_selectable(True)
         #RobL--v
+        # Updated the markup used to format the "about" text and include additional
+        # information about gPodder+ modifications. Used __author2__ instead of
+        # __author__ to preserve original author information without email info,
+        # which causes issues with the markup formatting.
         label.set_markup('\n'.join(x.strip() for x in """
         <b>gPodder+ {version} ({date})</b>
 
@@ -414,11 +428,14 @@ class gPodderApplication(Gtk.Application):
             self.owner_id = None
         self.quit()
 
-    def on_help_online_activate(self, action, param):         #RobL
-        util.open_website('https://gpodder.github.io/docs/')  #RobL
-
     #RobL--v
-    # Open the PDF help file if it exists, otherwise show an error dialog.
+    # Changed from on_help_activate to on_help_online_activate to reflect gPodder+
+    # modifications and added on_help_local_activate for local PDF help file.
+    def on_help_online_activate(self, action, param):
+        util.open_website('https://gpodder.github.io/docs/')
+
+    # Added method to handle "Help Local" action, which attempts to open a local PDF
+    # help file. It opens the file if it exists or shows an error dialog if not.
     def on_help_local_activate(self, action, param):
         if os.path.exists(gpodder.help_file):
             util.gui_open(gpodder.help_file, gui=self.window)
@@ -448,14 +465,19 @@ class gPodderApplication(Gtk.Application):
     def on_goto_mygpo(self, action, param):
         self.window.mygpo_client.open_website()
 
+    #RobL--v
+    # Disable "Check for Updates" functionality to avoid issues with gPodder+ modifications.
+    # This method can be re-enabled if update checking is desired, but it may cause issues
+    # if gPodder+ modifications are not compatible with the latest official gPodder updates.
     def on_check_for_updates_activate(self, action, param):
         #if os.path.exists(gpodder.no_update_check_file):
         #    self.window.check_for_distro_updates()
         #else:
         #    self.window.check_for_updates(silent=False)
-        self.window.show_message(                                                            #RobL
-            _('Software updates are disabled to avoid issues with gPodder+ modifications'),  #RobL
-            important=True)                                                                  #RobL
+        self.window.show_message(
+            _('Software updates are disabled to avoid issues with gPodder+ modifications'),
+            important=True)
+    #RobL--^
 
     def on_subscribe_to_url_activate(self, action, param):
         self.window.subscribe_to_url(param.get_string())
@@ -483,7 +505,7 @@ class gPodderApplication(Gtk.Application):
 
 
 def main(options=None):
-    GLib.set_application_name('gPodder+')  #RobL
+    GLib.set_application_name('gPodder+')  #RobL - Was "gPodder"
 
     gp = gPodderApplication(options)
     gp.run()

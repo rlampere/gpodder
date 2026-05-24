@@ -32,15 +32,7 @@ import time
 import gpodder
 from gpodder import jsonconfig, util
 
-# Text string processor for internationalization/localization.
 _ = gpodder.gettext
-
-# Plural-aware text string processor (1 egg, 2 eggs)
-N_ = gpodder.ngettext
-
-# Set up module-level logger.
-logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
 
 defaults = {
     # External applications used for playback
@@ -73,7 +65,7 @@ defaults = {
             'concurrent': 1,
             'concurrent_max': 16,
         },
-        'episodes': 100000,  #RobL - Increased from 200
+        'episodes': 100000,  #RobL - Increased max episodes per feed from 200
     },
 
     # Behavior of downloads
@@ -253,7 +245,7 @@ defaults = {
         'proxy_password': '',
     },
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Added feature to obtain podcast metadata from online sources.
     'metadata': {
         'podcast_index': {
@@ -267,17 +259,14 @@ defaults = {
         'enrich_on_add': False,
         'enrich_on_update': False,
     },
-    #RobL--^
-
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
     'extensions': {
         'enabled': [],
     },
-
     'sendto': {
         'custom_file_format': '{episode.title}',
         'custom_file_format_enabled': False,
     },
-
     'path': {
         'alternate': '',
     },

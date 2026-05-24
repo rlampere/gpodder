@@ -17,7 +17,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-import logging  #RobL
 import os
 
 from gi.repository import Gdk, Gio, Gtk
@@ -26,15 +25,7 @@ import gpodder
 from gpodder import util
 from gpodder.gtkui.base import GtkBuilderWidget
 
-# Text string processor for internationalization/localization.
 _ = gpodder.gettext
-
-# Plural-aware text string processor (1 egg, 2 eggs)
-N_ = gpodder.ngettext
-
-# Set up module-level logger.
-logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
 
 
 def show_message_dialog(parent, message, title=None):
@@ -132,7 +123,7 @@ class BuilderWidget(GtkBuilderWidget):
         tv.set_buffer(tb)
         tv.set_property('expand', True)
         sw = Gtk.ScrolledWindow()
-        sw.set_size_request(700, 600)  #RobL
+        sw.set_size_request(600, 300)  #RobL - Was: (400, 200)
         sw.set_property('shadow-type', Gtk.ShadowType.IN)
         sw.add(tv)
         sw.show_all()

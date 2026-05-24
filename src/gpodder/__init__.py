@@ -21,9 +21,9 @@
 __tagline__ = 'Media aggregator and podcast client'
 __author__ = 'Thomas Perl <thp@gpodder.org>'
 __author2__ = 'Thomas Perl'                     #RobL - Added for "about" dialog
-__version__ = '4.0.0'                           #RobL - Previous Version 3.11.5'
-__date__ = '2026-05-22'                         #RobL - Previous Date 2024-12-17
-__copyright__ = '© 2005-2024 The gPodder Team'
+__version__ = '4.0.0'                           #RobL - Previous gPodder Version 3.11.5'
+__date__ = '2026-05-24'                         #RobL - Previous gPodder Date 2024-12-17
+__copyright__ = '© 2005-2026 The gPodder Team'  #RobL - Previous gPodder Copyright 2005-2024
 __license__ = 'GNU General Public License, version 3 or later'
 __url__ = 'http://gpodder.org/'
 
@@ -158,7 +158,7 @@ config_file = None
 database_file = None
 downloads = None
 prefix = None
-help_file = None  #RobL
+help_file = None  #RobL - Added for "Help (online)" menu option
 
 ENV_HOME, ENV_DOWNLOADS = 'GPODDER_HOME', 'GPODDER_DOWNLOAD_DIR'
 

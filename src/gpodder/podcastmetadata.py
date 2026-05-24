@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #RobL-v-v-v-v-v-v-v-v-v-v-#-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
-#
+# ------------------
 # podcastmetadata.py
 # ------------------
 # This is a new module added for the gPodder+ project. This module is self-

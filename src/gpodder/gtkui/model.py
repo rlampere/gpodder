@@ -36,19 +36,13 @@ import gpodder
 from gpodder import coverart, model, query, util
 from gpodder.gtkui import draw
 
-# Text string processor for internationalization/localization.
 _ = gpodder.gettext
 
-# Plural-aware text string processor (1 egg, 2 eggs)
-N_ = gpodder.ngettext
-
-# Set up module-level logging.
 logger = logging.getLogger(__name__)
-#logger.setLevel(logging.INFO)
-
 
 #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
-# Definitions for color themes and styles used by the gPodder+ UI.
+# Added a new class that contains definitions for color themes and styles used
+# by the gPodder+ UI.
 class GUITheme:
     THEME_LIGHT = 'light'
     THEME_DARK = 'dark'
@@ -468,8 +462,9 @@ class EpisodeListModel(Gtk.ListStore):
     def _format_description(self, episode):
         d = []
 
-        #RobL--v
-        # Display the episode title differently based on its state using the GUITheme definitions above.
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Display the episode title differently based on its state using the
+        # GUITheme definitions above.
         title = episode.trimmed_title if self._config_ui_gtk_episode_list_trim_title_prefix else episode.title
         escaped_title = html.escape(title)
 
@@ -497,7 +492,7 @@ class EpisodeListModel(Gtk.ListStore):
                 f'{GUITheme.EPISODE_DEL_STYLE_END}'
                 f'</span>'
             )
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         if self._config_ui_gtk_episode_list_descriptions:
             d.append('\n')
@@ -763,7 +758,7 @@ class PodcastListModel(Gtk.ListStore):
         C_COVER, C_ERROR, C_PILL_VISIBLE, \
         C_VIEW_SHOW_UNDELETED, C_VIEW_SHOW_DOWNLOADED, \
         C_VIEW_SHOW_UNPLAYED, C_HAS_EPISODES, C_SEPARATOR, \
-        C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND = list(range(17))  #RobL
+        C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND = list(range(17))  #RobL - Added C_BACKGROUND for background color of podcast rows
 
     SEARCH_COLUMNS = (C_TITLE, C_DESCRIPTION, C_SECTION)
     SEARCH_ATTRS = ('title', 'description', 'group_by')
@@ -775,7 +770,7 @@ class PodcastListModel(Gtk.ListStore):
     def __init__(self, cover_downloader):
         Gtk.ListStore.__init__(self, str, str, str, GdkPixbuf.Pixbuf,
                 object, GdkPixbuf.Pixbuf, str, bool, bool, bool, bool,
-                bool, bool, int, bool, str, str)  #RobL
+                bool, bool, int, bool, str, str)  #RobL - Added 'str' type for C_BACKGROUND
 
         # Filter to allow hiding some episodes
         self._filter = self.filter_new()
@@ -993,7 +988,9 @@ class PodcastListModel(Gtk.ListStore):
         else:
             description_markup = html.escape(_('Subscription paused'))
 
-        #RobL--v
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Updated formatting of description and title based on the state of
+        # the channel, using the GUITheme definitions above.
         d = []
         if new:
             d.append(
@@ -1009,7 +1006,7 @@ class PodcastListModel(Gtk.ListStore):
             )
             d.append(title_markup)
             d.append(f'{GUITheme.PODCAST_OLD_STYLE_END}</span>')
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         if channel._update_error is not None:
             return ''.join(d + ['\n', '<span weight="bold">', description_markup, '</span>'])
@@ -1038,8 +1035,8 @@ class PodcastListModel(Gtk.ListStore):
                     True, True,
                     # C_VIEW_SHOW_UNPLAYED, C_HAS_EPISODES, C_SEPARATOR
                     True, True, False,
-                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND  #RobL
-                    0, True, '', '')                                         #RobL
+                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND  #RobL - Added C_BACKGROUND
+                    0, True, '', '')                                         #RobL - Added C_BACKGROUND
 
         def section_to_row(section):
             # C_URL, C_TITLE, C_DESCRIPTION, C_PILL, C_CHANNEL
@@ -1050,8 +1047,8 @@ class PodcastListModel(Gtk.ListStore):
                     True, True,
                     # C_VIEW_SHOW_UNPLAYED, C_HAS_EPISODES, C_SEPARATOR
                     True, True, False,
-                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND         #RobL
-                    0, False, section.title, GUITheme.color('PODCAST_SECTION_BG'))  #RobL
+                    # C_DOWNLOADS, C_COVER_VISIBLE, C_SECTION, C_BACKGROUND         #RobL - Added C_BACKGROUND
+                    0, False, section.title, GUITheme.color('PODCAST_SECTION_BG'))  #RobL - Added C_BACKGROUND
 
         if config.ui.gtk.podcast_list.all_episodes and channels:
             all_episodes = PodcastChannelProxy(db, config, channels, '', self)
@@ -1061,7 +1058,7 @@ class PodcastListModel(Gtk.ListStore):
             # Separator item
             if not config.ui.gtk.podcast_list.sections:
                 self.append(('', '', '', None, SeparatorMarker, None, '',
-                    True, True, True, True, True, True, 0, False, '', ''))  #RobL
+                    True, True, True, True, True, True, 0, False, '', ''))  #RobL - Added C_BACKGROUND
 
         def groupby_func(channel):
             return channel.group_by
@@ -1144,8 +1141,9 @@ class PodcastListModel(Gtk.ListStore):
         if isinstance(channel, PodcastChannelProxy) and not channel.ALL_EPISODES_PROXY:
             section = channel.title
 
-            #RobL--v
-            # ORIGINAL COMMENT -- We could customized the section header here with the list
+            #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+            # ORIGINAL COMMENT:
+            # We could customized the section header here with the list
             # of channels and their stats (i.e. add some "new" indicator)
 
             # Update the section header to include the total number of episodes
@@ -1155,13 +1153,13 @@ class PodcastListModel(Gtk.ListStore):
             else:
                 section_text = f'{section}   ({total} episodes)'
 
-            # The section header is styled based on the GUITheme constants defined above.
+            # The section header is styled based on GUITheme constants defined above.
             description = (
                 f'<span foreground="{GUITheme.color("PODCAST_SECTION_FG")}">'
                 f'{GUITheme.PODCAST_SECTION_STYLE_BEG}{html.escape(section_text)}'
                 f'{GUITheme.PODCAST_SECTION_STYLE_END}</span>'
             )
-            #RobL--^
+            #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
             pill_image = None
             cover_image = None

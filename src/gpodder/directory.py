@@ -22,24 +22,22 @@
 # gpodder.directory - Podcast directory and search providers
 # Thomas Perl <thp@gpodder.org>; 2014-10-22
 #
-import logging  #RobL
+import logging  #RobL - Added for error logging
 
 import urllib.error
 import urllib.parse
 import urllib.request
 
 import gpodder
-from gpodder import opml, util, podcastmetadata
+from gpodder import opml, util, podcastmetadata  #RobL - Added podcastmetadata import
 
-# Text string processor for internationalization/localization.
 _ = gpodder.gettext
 
-# Plural-aware text string processor (1 egg, 2 eggs)
-N_ = gpodder.ngettext
-
+# RobL--v
 # Set up module-level logger.
 logger = logging.getLogger(__name__)
 #logger.setLevel(logging.INFO)
+# RobL--^
 
 
 class JustAWarning(Exception):
@@ -114,8 +112,10 @@ def directory_entry_from_mygpo_json(url):
     return [DirectoryEntry(d['title'], d['url'], d['logo_url'], d['subscribers'], d['description'])
             for d in r.json()]
 
-
-#RobL--v
+#RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+# Module-level helper function to convert a list of PodcastMetadata objects to
+# a list of DirectoryEntry objects for use in the Podcast Index and Apple iTunes
+# search providers.
 def directory_entry_from_metadata_podcasts(podcasts):
     return [
         DirectoryEntry(
@@ -128,7 +128,7 @@ def directory_entry_from_metadata_podcasts(podcasts):
         for podcast in podcasts
         if podcast.feed_url
     ]
-#RobL--^
+#RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
 
 
 class GPodderNetSearchProvider(Provider):
@@ -236,6 +236,11 @@ class FixedOpmlFileProvider(Provider):
         return directory_entry_from_opml(self.filename)
 
 #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+# Added two new classes to support searching the Podcast Index and Apple iTunes
+# podcasts directories, using the podcastmetadata module to do the actual
+# searching and metadata retrieval. The search results are converted to
+# DirectoryEntry objects using a helper function that converts from
+# PodcastMetadata objects.
 
 class PodcastIndexSearchProvider(Provider):
     def __init__(self):
@@ -280,6 +285,13 @@ class AppleITunesSearchProvider(Provider):
         podcasts = provider.search_podcasts(query, limit=50)
         return directory_entry_from_metadata_podcasts(podcasts)
 
+#RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-
+
+#RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-
+# Replaced the original PROVIDERS list with a new one that includes the two new
+# search providers for Podcast Index and Apple iTunes, and re-ordered the
+# providers to put the search providers first. The original list is commented
+# out for reference.
 
 #PROVIDERS = [
 #    GPodderRecommendationsProvider,
