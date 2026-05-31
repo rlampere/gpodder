@@ -124,9 +124,21 @@ def _embedded_cover_art_to_pixbuf(image_data, size=96):
     if not image_data:
         return None
 
+    if not _looks_like_supported_cover_image(image_data):
+        logger.debug(
+            'Embedded cover art does not look like a supported image format; first bytes=%r',
+            image_data[:16],
+        )
+        return None
+
     loader = GdkPixbuf.PixbufLoader()
-    loader.write(image_data)
-    loader.close()
+
+    try:
+        loader.write(image_data)
+        loader.close()
+    except GLib.GError:
+        logger.debug('GdkPixbuf could not decode embedded cover art', exc_info=True)
+        return None
 
     pixbuf = loader.get_pixbuf()
     if pixbuf is None:
@@ -186,9 +198,27 @@ def _extract_embedded_cover_art(path_obj):
         for key in tags.keys():
             if str(key).startswith('APIC'):
                 frame = tags[key]
+
+                mime = (getattr(frame, 'mime', '') or '').lower().strip()
                 data = getattr(frame, 'data', None)
-                if data:
+
+                # ID3 allows APIC frames that point to an external image URL.
+                # Those are not embedded image bytes and should not be passed
+                # to GdkPixbuf.
+                if mime == '-->':
+                    logger.debug('Skipping linked APIC cover art in %s', source)
+                    continue
+
+                if data and _looks_like_supported_cover_image(data):
                     return data
+
+                if data:
+                    logger.debug(
+                        'Skipping unsupported APIC cover art in %s: mime=%r first_bytes=%r',
+                        source,
+                        mime,
+                        data[:16],
+                    )
     except Exception:
         logger.debug('Could not read APIC embedded artwork from %s', source, exc_info=True)
 
@@ -399,6 +429,29 @@ def _is_url_reachable(url, timeout=10):
 
     except (URLError, HTTPError, TimeoutError):
         return False
+
+def _looks_like_supported_cover_image(image_data):
+    """Return True if embedded artwork bytes look like a format GdkPixbuf should decode."""
+
+    if not image_data or len(image_data) < 12:
+        return False
+    # JPEG
+    if image_data.startswith(b'\xff\xd8\xff'):
+        return True
+    # PNG
+    if image_data.startswith(b'\x89PNG\r\n\x1a\n'):
+        return True
+    # GIF
+    if image_data.startswith((b'GIF87a', b'GIF89a')):
+        return True
+    # BMP
+    if image_data.startswith(b'BM'):
+        return True
+    # TIFF
+    if image_data.startswith((b'II*\x00', b'MM\x00*')):
+        return True
+
+    return False
 
 def _media_metadata_to_episode_metadata(metadata):
     """Convert local media file tags into the same object shape used by online metadata."""
@@ -1905,7 +1958,7 @@ class ManualEpisodeDialog(Gtk.Dialog):
         # Create a checkbox to choose whether to replace the existing media file with the
         # newly selected media file.
         self.check_replace_media = Gtk.CheckButton.new_with_label(_('Replace media file from selected source'))
-        self.check_replace_media.set_active(not self.is_edit)
+        self.check_replace_media.set_active(False)
 
         # Create a field for the episode title.
         self.entry_title = Gtk.Entry()
@@ -2167,14 +2220,25 @@ class ManualEpisodeDialog(Gtk.Dialog):
     def on_media_file_selected(self, chooser):
         """When a media file is selected, update the help label to prompt
            the user to read tags from the media file."""
-        filename = chooser.get_filename()
-        if not filename:
-            self.update_embedded_cover_preview()
-            return
 
-        self.media_help_label.set_text(
-            _('Media file selected. Click "Read tags..." to choose which tag values to apply.')
-        )
+        filename = chooser.get_filename()
+
+        if filename:
+            # A real media file was selected, so default to using it as the
+            # source media file for this episode.
+            self.check_replace_media.set_active(True)
+
+            self.media_help_label.set_text(
+                _('Media file selected. Click "Read tags..." to choose which tag values to apply.')
+            )
+        else:
+            # No file was selected. This covers the initial empty state and cases
+            # where the chooser has no usable selected filename.
+            self.check_replace_media.set_active(False)
+
+            self.media_help_label.set_markup(
+                _('<i>Select a media file first so the title, description, and published date fields can be populated.</i>')
+            )
 
         self.update_embedded_cover_preview()
 
@@ -2361,7 +2425,7 @@ class ManualEpisodeDialog(Gtk.Dialog):
 
         if not filename:
             self.embedded_cover_image.clear()
-            self.embedded_cover_status_label.set_text(_('Episode Cover Art\n(No local media file.)'))
+            self.embedded_cover_status_label.set_text(_('Embedded Cover Art\n(No local media file.)'))
             return
 
         try:
@@ -2370,20 +2434,20 @@ class ManualEpisodeDialog(Gtk.Dialog):
 
             if pixbuf is None:
                 self.embedded_cover_image.clear()
-                self.embedded_cover_status_label.set_text(_('Episode Cover Art\n(No embedded cover art found.)'))
+                self.embedded_cover_status_label.set_text(_('Embedded Cover Art\n(No embedded cover art found.)'))
                 return
 
             self.embedded_cover_image.set_from_pixbuf(pixbuf)
 
             basename = os.path.basename(filename)
             self.embedded_cover_status_label.set_text(
-                _('Episode Cover Art: %s') % basename
+                _('Embedded Cover Art: %s') % basename
             )
 
         except Exception:
             logger.warning('Could not preview embedded cover art from %s', filename, exc_info=True)
             self.embedded_cover_image.clear()
-            self.embedded_cover_status_label.set_text(_('Episode Cover Art\n(Could not preview embedded cover art.)'))
+            self.embedded_cover_status_label.set_text(_('Embedded Cover Art\n(Could not preview embedded cover art.)'))
 
     #---------------------------------------------------------------------------
     # Private Methods
@@ -2947,6 +3011,7 @@ class ManualEntryController(object):
         )
         return podcast
 
+    #---------------------------------------------------------------------------
     def update_manual_podcast(self, podcast, title, url, link='', cover_url='',
                               cover_file='', section='', description=''):
         """Update the selected podcast with the provided data from the edit dialog."""
@@ -2957,12 +3022,18 @@ class ManualEntryController(object):
                              _('A podcast title is required to save the podcast settings.'))
             return None  # Do not update the podcast if the title is missing.
 
+        # Check if the podcast title is being changed, and if so, rename the podcast
+        # using the rename() method to ensure the underlying directory and feed URL get
+        # updated accordingly. If the title is not changing, just update the title field.
         old_title = podcast.title or ''
-        if title != old_title:
+        podcast_title_changed = title != old_title
+
+        if podcast_title_changed:
             podcast.rename(title)
         else:
             podcast.title = title
 
+        # Verify a feed URL was specified and setup to determine if the URL changed.
         url = (url or '').strip()
         if not url:
             self._show_error(_('Edit Podcast Manually -> Feed URL missing'),
@@ -3020,8 +3091,14 @@ class ManualEntryController(object):
         if new_cover_url != old_cover_url:
             podcast.cover_url = new_cover_url
 
+        # Save changes to the podcast and commit it to the database.
         podcast.save()
-        self.ui.db.commit()  # Added to commit changes to database.
+        self.ui.db.commit()
+
+        # If the podcast title changed, rename the episode media files to match the
+        # new podcast title.
+        if podcast_title_changed:
+            self._rename_episode_media_files_for_podcast(podcast)
 
         # If the cover URL changed or a local cover file was selected, store the new cover art for the podcast.
         #   Cover URL changed  → download URL and save folder.jpg
@@ -3115,7 +3192,9 @@ class ManualEntryController(object):
 
         return episode
 
-    def add_manual_episode_batch(self, podcast, media_files, is_new=True, use_file_tags=True, on_progress=None):
+    #---------------------------------------------------------------------------
+    def add_manual_episode_batch(self, podcast, media_files, is_new=True,
+                                use_file_tags=True, on_progress=None):
         if podcast is None:
             raise ManualEntryError(_('A podcast must be selected.'))
         if not media_files:
@@ -3182,6 +3261,7 @@ class ManualEntryController(object):
 
         return created, errors
 
+    #---------------------------------------------------------------------------
     def update_manual_episode(self, episode, podcast, title, media_file, replace_media,
                               published_text, link='', guid='', season_num=0, episode_num=0,
                               is_new=True, description='', description_is_html=False,
@@ -3282,9 +3362,7 @@ class ManualEntryController(object):
         episode.last_playback = 0 if is_new else int(time.time())
 
         media_url = (media_url or '').strip()
-        episode.link = link.strip() or (
-            media_source.as_uri() if media_source is not None else episode.link
-        )
+        episode.link = (link.strip() or '')
 
         if not total_time:
             episode.total_time = getattr(episode, 'total_time', 0) or 0
@@ -3427,6 +3505,61 @@ class ManualEntryController(object):
 
         raise ManualEntryError(
             _('Published date must use YYYY-MM-DD or YYYY-MM-DD HH:MM.')
+        )
+
+    def _rename_episode_media_files_for_podcast(self, podcast):
+        """Rename downloaded episode media files after the podcast title changes."""
+
+        if podcast is None:
+            return
+
+        renamed = 0
+        unchanged = 0
+        skipped = 0
+        failed = 0
+
+        episodes = list(getattr(podcast, 'children', []) or [])
+
+        for episode in episodes:
+            if not episode.was_downloaded(and_exists=True):
+                skipped += 1
+                continue
+
+            old_filename = getattr(episode, 'download_filename', None)
+
+            try:
+                changed = episode.refresh_episode_media_filename()
+
+                if changed:
+                    renamed += 1
+                    logger.info(
+                        'Renamed episode media after podcast title change: %s -> %s',
+                        old_filename,
+                        getattr(episode, 'download_filename', None),
+                    )
+                else:
+                    unchanged += 1
+
+            except Exception:
+                failed += 1
+                logger.exception(
+                    'Could not rename episode media file after podcast title change: %s',
+                    getattr(episode, 'title', ''),
+                )
+
+        if hasattr(podcast, '_determine_common_prefix'):
+            podcast._determine_common_prefix()
+
+        podcast.save()
+        self.ui.db.commit()
+
+        logger.info(
+            'Podcast title change media rename complete for "%s": renamed=%d, unchanged=%d, skipped=%d, failed=%d',
+            podcast.title,
+            renamed,
+            unchanged,
+            skipped,
+            failed,
         )
 
     #---------------------------------------------------------------------------

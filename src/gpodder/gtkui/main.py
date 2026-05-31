@@ -3948,11 +3948,6 @@ class gPodder(BuilderWidget):
                 # Note: This also undeletes deleted episodes but deleted episodes
                 # were filtered out so this should only affect non-deleted episodes.
                 episode.mark_new()
-
-                # Force filename regeneration so the file is renamed to match
-                # the <podcast title>-Sxx-Eyy-<episode title> naming scheme.
-                if mark_as_new and episode.was_downloaded(and_exists=True):
-                    episode.local_filename(create=True, force_update=True)
             else:
                 # Mark the episode as old and update the database accordingly.
                 episode.mark_old()

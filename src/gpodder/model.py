@@ -34,10 +34,9 @@ import shutil
 import string
 import time
 import urllib.parse
-import datetime  #RobL
 
-import re               #RobL
-from io import BytesIO  #RobL
+import re               #RobL - Added to support new version of parse_feed()
+from io import BytesIO  #RobL - Added to support new version of parse_feed()
 
 import podcastparser
 
@@ -48,28 +47,13 @@ logger = logging.getLogger(__name__)
 
 _ = gpodder.gettext
 
-#RobL--v
+#RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+# Added for helper function to repair unescaped ampersands in XML attribute
+# values, which is a common issue in feeds and causes parsing to fail.
 _XML_ENTITY_RE = re.compile(
     rb'&(?!amp;|lt;|gt;|quot;|apos;|#[0-9]+;|#x[0-9A-Fa-f]+;)'
 )
-
-def _repair_unescaped_xml_ampersands(data):
-    """Repair raw ampersands that are illegal in XML.
-
-    XML only allows '&' when it begins a valid entity such as:
-        &amp; &lt; &gt; &quot; &apos; &#123; &#x1F;
-    A feed URL such as '?a=1&b=2' is invalid XML and must be
-    represented as '?a=1&amp;b=2'.
-
-    This function only repairs ampersands that are not already valid
-    XML entities.
-    """
-    if not data:
-        return data, 0
-
-    repaired, count = _XML_ENTITY_RE.subn(rb'&amp;', data)
-    return repaired, count
-#RobL--^
+#RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
 
 class Feed:
@@ -238,8 +222,27 @@ class gPodderFetcher(feedcore.Fetcher):
         url = vimeo.get_real_channel_url(url)
         return url
 
-    #RobL--v
-    # ----- Old Version -----
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+    # Added helper function to repair unescaped ampersands in XML attribute
+    # values, which is a common issue in feeds and causes parsing to fail.
+    def _repair_unescaped_xml_ampersands(data):
+        """Repair raw ampersands that are illegal in XML.
+
+        XML only allows '&' when it begins a valid entity such as:
+            &amp; &lt; &gt; &quot; &apos; &#123; &#x1F;
+        A feed URL such as '?a=1&b=2' is invalid XML and must be
+        represented as '?a=1&amp;b=2'.
+
+        This function only repairs ampersands that are not already valid
+        XML entities.
+        """
+        if not data:
+            return data, 0
+
+        repaired, count = _XML_ENTITY_RE.subn(rb'&amp;', data)
+        return repaired, count
+
+    # ----- Old version of parse_feed() -----
     #def parse_feed(self, url, feed_data, data_stream, headers, status, max_episodes=0, **kwargs):
     #    self.feed_data = feed_data
     #    try:
@@ -249,7 +252,10 @@ class gPodderFetcher(feedcore.Fetcher):
     #        return feedcore.Result(status, PodcastParserFeed(feed, self, max_episodes))
     #    except ValueError as e:
     #        raise feedcore.InvalidFeed('Could not parse feed: {url}: {msg}'.format(url=url, msg=e))
-    # ----- New Version -----
+
+    # ----- New version of parse_feed() -----
+    # The new version of this method was added because some feeds contain unescaped ampersands
+    # in XML attribute values, which is invalid XML and causes parsing to fail.
     def parse_feed(self, url, feed_data, data_stream, headers, status, max_episodes=0, **kwargs):
         self.feed_data = feed_data
 
@@ -265,7 +271,7 @@ class gPodderFetcher(feedcore.Fetcher):
             repaired_feed_data = None
 
             if feed_data is not None and getattr(feed_data, 'content', None):
-                repaired_content, repair_count = _repair_unescaped_xml_ampersands(feed_data.content)
+                repaired_content, repair_count = self._repair_unescaped_xml_ampersands(feed_data.content)
 
                 if repair_count:
                     logger.warning(
@@ -306,7 +312,7 @@ class gPodderFetcher(feedcore.Fetcher):
         feed['url'] = url
         feed['headers'] = headers
         return feedcore.Result(status, PodcastParserFeed(feed, self, max_episodes))
-    #RobL--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
 
 # Our podcast model:
@@ -373,8 +379,8 @@ class PodcastEpisode(PodcastModelObject):
         episode.title = entry['title']
         episode.link = entry['link']
         episode.episode_art_url = entry.get('episode_art_url')
-        episode.season_num = entry.get('season_num', 0)    #RobL
-        episode.episode_num = entry.get('episode_num', 0)  #RobL
+        episode.season_num = entry.get('season_num', 0)    #RobL - Added season_num to support Plex-style naming
+        episode.episode_num = entry.get('episode_num', 0)  #RobL - Added episode_num to support Plex-style naming
 
         # Only one of the two description fields should be set at a time.
         # This keeps the database from doubling in size and reduces load time from slow storage.
@@ -477,8 +483,8 @@ class PodcastEpisode(PodcastModelObject):
         self.published = 0
         self.download_filename = None
         self.payment_url = None
-        self.season_num = 0   #RobL
-        self.episode_num = 0  #RobL
+        self.season_num = 0   #RobL - Added season_num to support Plex-style naming
+        self.episode_num = 0  #RobL - Added episode_num to support Plex-style naming
 
         self.state = gpodder.STATE_NORMAL
         self.is_new = True
@@ -689,14 +695,14 @@ class PodcastEpisode(PodcastModelObject):
 
     def html_description(self):
         return self.description_html \
-            or util.nice_html_description(self.episode_art_url, self.description or _(' ')) #RobL - removed 'No description available' text
+            or util.nice_html_description(self.episode_art_url, self.description or _(' ')) #RobL - Removed 'No description available' text
 
     def one_line_description(self):
         MAX_LINE_LENGTH = 120
         desc = self._text_description
         desc = re.sub(r'\s+', ' ', desc).strip()
         if not desc:
-            return _(' ') #RobL - removed 'No description available' text
+            return _(' ') #RobL - Removed 'No description available' text
         else:
             desc = desc.strip()
 
@@ -742,7 +748,10 @@ class PodcastEpisode(PodcastModelObject):
                     or self.download_filename == name):
                 return name
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+    # Added methods to support Plex-style naming of downloaded media files,
+    # which is based on the season and episode numbers in the feed metadata or
+    # publication date if season/episode numbers are missing.
     def plex_season_value(self):
         """Return season as 2 digits or publication year as 4 digits if season is missing.
         """
@@ -752,9 +761,7 @@ class PodcastEpisode(PodcastModelObject):
             dt = datetime.datetime.fromtimestamp(self.published)
             return f'{dt.year:04d}'
         return '0000'
-    #Robl--^
 
-    #RobL--v
     def plex_episode_value(self):
         """Return episode number as 2 digits or MMDD if episode number is missing.
         """
@@ -764,9 +771,7 @@ class PodcastEpisode(PodcastModelObject):
             dt = datetime.datetime.fromtimestamp(self.published)
             return f'{dt.month:02d}{dt.day:02d}'
         return '0000'
-    #Robl--^
 
-    #RobL--v
     def plex_file_basename(self):
         """Create the file basename using the podcast name, season number, episode number
         and episode title or a hash of the URL if the title is not available.
@@ -774,7 +779,48 @@ class PodcastEpisode(PodcastModelObject):
         podcast_name = self.channel.title or self.channel.url or 'Podcast'
         episode_title = self.title or hashlib.md5(self.url.encode('utf-8')).hexdigest()
         return f'{podcast_name}-S{self.plex_season_value()}E{self.plex_episode_value()}-{episode_title}'
-    #Robl--^
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+    # Added a method to rename an episode's existing media file based on the
+    # current metadata. The media filename can change if certain metadata
+    # fields such as season number, episode number, or the title are updated.
+    # Also, if the associated podcast name changes, the media filename must
+    # be updated to reflect the new podcast name in the filename.
+    def refresh_episode_media_filename(self):
+        """Regenerate this episode's media filename based on current metadata
+        and rename the media file on disk if necessary.
+        """
+
+        # Only proceed if the episode was downloaded and the media file
+        # exists on disk.
+        if not self.was_downloaded(and_exists=True):
+            return False
+
+        # Save the current media filename so we can check if it changes after
+        # regenerating the filename.
+        old_filename = self.download_filename
+
+        # Calling local_filename() with create=True and force_update=True will
+        # update the media filename based on current metadata and cause
+        # the existing media file to be renamed/moved on disk if the new
+        # filename differs from the existing one.
+        new_filename = self.local_filename(create=True, force_update=True)
+
+        # If no filename was returned or no media file matching the new
+        # filename exists, do nothing.
+        if not new_filename or not os.path.exists(new_filename):
+            return False
+
+        # If the filename changed, update the internal database with the new
+        # file info.
+        if self.download_filename != old_filename:
+            self.file_size = os.path.getsize(new_filename)
+            self.save()
+            return True
+
+        return False
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def local_filename(self, create, force_update=False, check_only=False,
             template=None, return_wanted_filename=False):
@@ -821,9 +867,32 @@ class PodcastEpisode(PodcastModelObject):
                         self.channel.url)
                 template = None
 
-            #RobL--v
+            #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+            # This section of logic is reached if:
+            # 1. check_only = False
+            #       (i.e. we are not just checking on the existence of a
+            #        filename) -AND-
+            # 2. either force_update = True
+            #               (i.e. we want to force an update of the filename
+            #                based on updated metadata)
+            #    -OR-   download_filename is None
+            #               (i.e. there is no existing filename for this
+            #                episode, which can happen if the episode is
+            #                being downloaded for the first time or if the
+            #                filename was not generated previously due
+            #                to a bug such as gPodder bug 1440).
+            # In either case, we want to generate a new filename for this
+            # episode based on the current metadata.
+            # 
+            # The logic in this section was updated to support Plex-style
+            # naming of downloaded media files, which is based on the season
+            # and episode numbers or publication date if season/episode
+            # numbers are missing. The existing filename generation logic
+            # was moved to a new method plex_file_basename() and this section
+            # was updated to use it when generating the filename.
+
             # Try to find a new filename for the current file
-            # Use template only for extension, not basename
+            # Note: Template is only used for the file extension, not the basename.
             if template is not None:
                 # If template is specified, trust the template's extension
                 #episode_filename, ext = os.path.splitext(template)
@@ -831,28 +900,33 @@ class PodcastEpisode(PodcastModelObject):
             #else:
                 #episode_filename, _ = util.filename_from_url(self.url)
 
-            # Build Plex-style file basename from metadata
+            # Build Plex-style file basename from current metadata.
             episode_filename = self.plex_file_basename()
 
-            #if 'redirect' in episode_filename and template is None:
+            if 'redirect' in episode_filename and template is None:
                 # This looks like a redirection URL - force URL resolving!
-                #logger.warning('Looks like a redirection to me: %s', self.url)
-                #url = util.get_real_url(self.channel.authenticate_url(self.url))
-                #logger.info('Redirection resolved to: %s', url)
-                #episode_filename, _ = util.filename_from_url(url)
+                logger.warning('Looks like a redirection to me: %s', self.url)
+                url = util.get_real_url(self.channel.authenticate_url(self.url))
+                logger.info('Redirection resolved to: %s', url)
+                resolved_url, _ = util.filename_from_url(url)  # changed episode_filename to resolved_url
+                logger.warning('Resolved URL filename (%s) ignored - using %s',
+                              resolved_url, episode_filename)
 
             # Use title for YouTube, Vimeo and Soundcloud downloads
-            #if (youtube.is_video_link(self.url)
-                    #or vimeo.is_video_link(self.url)
-                    #or episode_filename == 'stream'):
-                #episode_filename = self.title
+            if (youtube.is_video_link(self.url)
+                    or vimeo.is_video_link(self.url)
+                    or episode_filename == 'stream'):
+                video_title = self.title  # changed episode_filename to video_title
+                logger.warning('Video title filename (%s) ignored - using %s',
+                               video_title, episode_filename)
 
             # If episode basename is empty for some reason, fall back to default md5 hexdigest of the URL
             #if not episode_filename or episode_filename.startswith('redirect.'):
             if not episode_filename:
                 logger.error('Invalid file basename - falling back to URL: Podcast %s, Episode %s',
-                        self.channel.url, self.url)
+                            self.channel.url, self.url)
                 episode_filename = hashlib.md5(self.url.encode('utf-8')).hexdigest()
+            #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
             # Also sanitize ext (see #591 where ext=.mp3?dest-id=754182)
             fn_template, ext = util.sanitize_filename_ext(
@@ -863,11 +937,42 @@ class PodcastEpisode(PodcastModelObject):
 
             # Find a unique filename for this episode
             wanted_filename = self.find_unique_file_name(fn_template, ext)
-            #RobL--^
 
             if return_wanted_filename:
                 # return the calculated filename without updating the database
                 return wanted_filename
+
+            #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+            # At this point, we generated a new filename for this episode based
+            # on the current metadata and we stored it in "wanted_filename".
+            #
+            # This section of logic handles 2 cases:
+            # 1. a media filename already exists -and- the new filename is
+            #    different
+            # 2. no media filename exists -or- the new filename is the same
+            #    as the existing name
+            #
+            # Case #1: We want to rename an existing media file to the new
+            # filename and update the internal database with new file info.
+            # If the media file associated with the existing filename does
+            # NOT exist -and- force_update=True, it's likely this method was
+            # called from the "media download" code to save a new media file.
+            # In this case we simply return a filename to use in saving the
+            # new downloaded file. For all other conditions, we do not do
+            # or change anything.
+            #
+            # Case #2: We simply set the episode's media filename to the new
+            # filename. If no media file exists, this is likely the first
+            # time we are downloading the episode. If the new and existing
+            # filenames are the same, it means the metadata changes did not
+            # impact the associated media filename. This can happen, for
+            # example, if a special character is changed in the title that
+            # gets "sanitized" into producing the same filename.
+            #
+            # Note that calling save() below updates the internal database,
+            # but the change is not committed to disk until db.commit()
+            # is called.
+            #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
             # The old file exists, but we have decided to want a different filename
             if self.download_filename and wanted_filename != self.download_filename:
@@ -878,8 +983,15 @@ class PodcastEpisode(PodcastModelObject):
                     logger.info('Renaming %s => %s', old_file_name, new_file_name)
                     os.rename(old_file_name, new_file_name)
                 elif force_update and not os.path.exists(old_file_name):
+                    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+                    # Changed confusing comment - From:
                     # When we call force_update, the file might not yet exist when we
                     # call it from the downloading code before saving the file
+                    # To:
+                    # We call this method with force_update = True and no existing
+                    # filename from the code that downloads media files. This provides
+                    # a filename to use when saving the downloaded file.
+                    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
                     logger.info('Choosing new filename: %s', new_file_name)
                 else:
                     logger.warning('%s exists or %s does not', new_file_name, old_file_name)
@@ -1045,7 +1157,7 @@ class PodcastEpisode(PodcastModelObject):
     def update_from(self, episode):
         for k in ('title', 'url', 'episode_art_url', 'description', 'description_html', 'chapters', 'link',
                   'published', 'guid', 'payment_url',
-                  'season_num', 'episode_num'):  #RobL
+                  'season_num', 'episode_num'):  #RobL - Added season_num and episode_num to support Plex-style naming
             setattr(self, k, getattr(episode, k))
         # Don't overwrite file size on downloaded episodes
         # See #648 refreshing a youtube podcast clears downloaded file size
@@ -1309,7 +1421,7 @@ class PodcastChannel(PodcastModelObject):
                 self.title = self.title[len(VIMEO_PREFIX):] + ' on Vimeo'
             # End YouTube- and Vimeo-specific title FIX
 
-            self.rename(new_title)  #RobL - Rename podcast folder when title changes
+            self.rename(new_title)  #RobL - Renames podcast folder when title changes
 
     def _consume_metadata(self, title, link, description, cover_url,
             payment_url):
@@ -1431,11 +1543,11 @@ class PodcastChannel(PodcastModelObject):
         # Sort episodes by pubdate, descending
         self.children.sort(key=lambda e: e.published, reverse=True)
 
-    #RobL--v
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
     # Removes episodes that are marked as deleted from the database and from the
     # podcast's episode list.
     def remove_deleted_episodes(self):
-        """Permanently remove STATE_DELETED episodes from this podcast."""
+        """Permanently remove STATE_DELETED episodes from a podcast."""
         if self.id is None:
             return []
 
@@ -1451,18 +1563,18 @@ class PodcastChannel(PodcastModelObject):
                     self.children.remove(episode)
 
         return removed
-    #RobL--v
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     def update(self, max_episodes=0):
         max_episodes = int(max_episodes)
         new_episodes = []
 
-        #RobL--v
-        # Manual podcasts are local database-only entries and do not have
-        # a real fetchable feed URL
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Manual podcasts are local database-only entries and do not have a
+        # real feed URL.
         if self.url and self.url.startswith('manual://'):
             return new_episodes
-        #RobL--^
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         try:
             result = self.feed_fetcher.fetch_channel(self, max_episodes)
@@ -1560,15 +1672,28 @@ class PodcastChannel(PodcastModelObject):
 
     def rename(self, new_title):
         new_title = new_title.strip()
-        #RobL - deleted if self.title == new_title: return because we want to rename the folder
-        #RobL - even if the title is the same but the folder name is different (e.g. after sanitization)
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Deleted (if self.title == new_title: return) logic because we want to
+        # ensure the podcast folder stays synchronized with the podcast title
+        # (see logic that follows).
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         fn_template = util.sanitize_filename(new_title, self.MAX_FOLDERNAME_LENGTH)
 
         new_folder_name = self.find_unique_folder_name(fn_template)
 
-        if self.title == new_title and self.download_folder == new_folder_name:  #RobL
-            return                                                               #RobL
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Only return early if both the title and download folder are unchanged
+        # (see deleted logic above). Adding this logic ensures the associated
+        # podcast folder name remains consistent with the podcast title.
+        # The logic below handles renaming the old podcast folder to the new
+        # name if the new podcast folder does NOT already exist -OR- moving
+        # episode files from the old podcast folder to the new folder if the
+        # new podcast folder already exists (i.e. merges two podcasts with the
+        # same title).
+        if self.title == new_title and self.download_folder == new_folder_name:
+            return
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         if new_folder_name and new_folder_name != self.download_folder:
             new_folder = os.path.join(gpodder.downloads, new_folder_name)
@@ -1690,8 +1815,7 @@ class Model(object):
             self.children = self.db.load_podcasts(podcast_factory)
 
             # Check download folders for changes (bug 902)
-            #RobL--v
-            #
+            #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
             # Copilot suggests:
             # This is now done in PodcastChannel.get_save_dir() which is called during
             # loading of the podcast and which also creates the download folder if it
@@ -1700,7 +1824,7 @@ class Model(object):
             #
             #for podcast in self.children:
             #    podcast.check_download_folder()
-            #RobL--^
+            #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
         return self.children
 
