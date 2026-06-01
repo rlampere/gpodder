@@ -119,6 +119,7 @@ defaults = {
                     'episode_column_sort_id': 0,
                     'episode_column_sort_order': False,
                     'episode_column_order': [],
+                    'episode_sort_by_podcast': {},  #RobL - Feature to save episode sorting preferences per podcast
                 },
                 'podcastdirectory': {
                     'width': -1,

@@ -73,7 +73,7 @@
             <section>
                 <item>
                     <attribute name="action">win.manualEditPodcast</attribute>
-                    <attribute name="label" translatable="yes">Edit Podcast Settings...</attribute>
+                    <attribute name="label" translatable="yes">Edit Podcast...</attribute>
                 </item>
                 <item>
                     <attribute name="action">win.manualAddPodcast</attribute>
@@ -176,6 +176,16 @@
                 <item>
                     <attribute name="action">win.episodeLock</attribute>
                     <attribute name="label" translatable="yes">Lock</attribute>
+                </item>
+            </section>
+            <section>
+                <item>
+                    <attribute name="action">win.manualAddEpisodeSelectedPodcast</attribute>
+                    <attribute name="label" translatable="yes">Add New Episode (manually)...</attribute>
+                </item>
+                <item>
+                    <attribute name="action">win.manualAddEpisodeBatchSelectedPodcast</attribute>
+                    <attribute name="label" translatable="yes">Add Multiple Episodes (manually)...</attribute>
                 </item>
             </section>
             <section>

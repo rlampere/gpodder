@@ -1335,10 +1335,26 @@ class gPodder(BuilderWidget):
         self.config.ui.gtk.state.main_window.episode_column_order = \
             [column.get_sort_column_id() for column in treeview.get_columns()]
 
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+    # Replaced existing on_episode_list_header_sorted with new version that
+    # saves both the sort column and sort order to the config, so that both
+    # can be restored on startup. The old version only saved the sort column,
+    # and defaulted to ascending order on startup, which was not ideal.
+    #def on_episode_list_header_sorted(self, column):
+    #    self.config.ui.gtk.state.main_window.episode_column_sort_id = column.get_sort_column_id()
+    #    self.config.ui.gtk.state.main_window.episode_column_sort_order = \
+    #        (column.get_sort_order() is Gtk.SortType.ASCENDING)
     def on_episode_list_header_sorted(self, column):
-        self.config.ui.gtk.state.main_window.episode_column_sort_id = column.get_sort_column_id()
-        self.config.ui.gtk.state.main_window.episode_column_sort_order = \
-            (column.get_sort_order() is Gtk.SortType.ASCENDING)
+        sort_id = column.get_sort_column_id()
+        ascending = column.get_sort_order() is Gtk.SortType.ASCENDING
+
+        self.save_episode_sort_settings_for_channel(
+            self.active_channel,
+            sort_id,
+            ascending,
+        )
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+
 
     def on_episode_list_header_clicked(self, button, event):
         if event.button == 1:
@@ -1473,13 +1489,17 @@ class gPodder(BuilderWidget):
 
             w.connect('button-release-event', self.on_episode_list_header_clicked)
 
+            #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+            # The following code is commented out because per-podcast episode
+            # sorting does not require this.
             # Restore column sorting
-            if column.get_sort_column_id() == self.config.ui.gtk.state.main_window.episode_column_sort_id:
-                self.episode_list_model._sorter.set_sort_column_id(Gtk.TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID,
-                    Gtk.SortType.DESCENDING)
-                self.episode_list_model._sorter.set_sort_column_id(column.get_sort_column_id(),
-                    Gtk.SortType.ASCENDING if self.config.ui.gtk.state.main_window.episode_column_sort_order
-                        else Gtk.SortType.DESCENDING)
+            #if column.get_sort_column_id() == self.config.ui.gtk.state.main_window.episode_column_sort_id:
+            #    self.episode_list_model._sorter.set_sort_column_id(Gtk.TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID,
+            #        Gtk.SortType.DESCENDING)
+            #    self.episode_list_model._sorter.set_sort_column_id(column.get_sort_column_id(),
+            #        Gtk.SortType.ASCENDING if self.config.ui.gtk.state.main_window.episode_column_sort_order
+            #            else Gtk.SortType.DESCENDING)
+            #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
             # Save column sorting when user clicks column headers
             column.connect('clicked', self.on_episode_list_header_sorted)
 
@@ -3180,6 +3200,9 @@ class gPodder(BuilderWidget):
                 # is called once per episode (4k time in my case), causing episode shownotes
                 # to be updated as many time, resulting in UI freeze for 10 seconds.
                 self.episode_list_model.replace_from_channel(self.active_channel)
+
+            #RobL - Apply the per-podcast sort order to the active podcast.
+            self.apply_episode_sort_settings_for_channel(self.active_channel)  #RobL
         else:
             self.episode_list_model.clear()
 
@@ -5064,6 +5087,88 @@ class gPodder(BuilderWidget):
         time.sleep(seconds)
         while Gtk.events_pending():
             Gtk.main_iteration_do(False)
+    #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+
+    #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+    # The next 4 functions are for per-podcast episode sort settings. The user
+    # can choose to have different episode sort settings for each podcast,
+    # or to use the same global sort settings for all podcasts. The settings
+    # are saved in the config and applied when switching between podcasts.
+
+    def apply_episode_sort_settings_for_channel(self, channel):
+        """Apply the saved episode sort settings for the selected podcast."""
+
+        sort_id, ascending = self.get_episode_sort_settings_for_channel(channel)
+
+        if not sort_id:
+            sort_id = EpisodeListModel.C_PUBLISHED
+            ascending = False
+
+        self.episode_list_model._sorter.set_sort_column_id(
+            Gtk.TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID,
+            Gtk.SortType.DESCENDING,
+        )
+
+        self.episode_list_model._sorter.set_sort_column_id(
+            sort_id,
+            Gtk.SortType.ASCENDING if ascending else Gtk.SortType.DESCENDING,
+        )
+
+    def get_episode_sort_key_for_channel(self, channel):
+        """Return the config key used for per-podcast episode sort settings."""
+
+        if channel is None:
+            return None
+
+        # Only save per-podcast sort settings for real podcasts.
+        # "All Episodes" and section proxy rows should continue to use the global sort.
+        if isinstance(channel, PodcastChannelProxy):
+            return None
+
+        return getattr(channel, 'url', None)
+
+
+    def get_episode_sort_settings_for_channel(self, channel):
+        """Return saved sort settings for this podcast, or the global fallback."""
+
+        sort_key = self.get_episode_sort_key_for_channel(channel)
+        sort_by_podcast = dict(self.config.ui.gtk.state.main_window.episode_sort_by_podcast or {})
+
+        if sort_key and sort_key in sort_by_podcast:
+            settings = sort_by_podcast.get(sort_key) or {}
+            sort_id = settings.get('sort_id')
+            ascending = settings.get('ascending')
+
+            if sort_id is not None and ascending is not None:
+                return sort_id, bool(ascending)
+
+        return (
+            self.config.ui.gtk.state.main_window.episode_column_sort_id,
+            self.config.ui.gtk.state.main_window.episode_column_sort_order,
+        )
+
+    def save_episode_sort_settings_for_channel(self, channel, sort_id, ascending):
+        """Save episode sort settings for the selected podcast."""
+
+        if sort_id is None:
+            return
+
+        # Keep existing global behavior as the fallback/default.
+        self.config.ui.gtk.state.main_window.episode_column_sort_id = sort_id
+        self.config.ui.gtk.state.main_window.episode_column_sort_order = bool(ascending)
+
+        sort_key = self.get_episode_sort_key_for_channel(channel)
+        if not sort_key:
+            return
+
+        sort_by_podcast = dict(self.config.ui.gtk.state.main_window.episode_sort_by_podcast or {})
+        sort_by_podcast[sort_key] = {
+            'sort_id': int(sort_id),
+            'ascending': bool(ascending),
+        }
+
+        # Assign the whole dict back so JsonConfig sees the change and saves it.
+        self.config.ui.gtk.state.main_window.episode_sort_by_podcast = sort_by_podcast
     #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
     #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v

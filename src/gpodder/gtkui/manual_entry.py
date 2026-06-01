@@ -2218,22 +2218,34 @@ class ManualEpisodeDialog(Gtk.Dialog):
         self.choose_and_apply_episode_metadata(metadata)
 
     def on_media_file_selected(self, chooser):
-        """When a media file is selected, update the help label to prompt
-           the user to read tags from the media file."""
+        """When a media file is selected, update related media-file fields."""
 
         filename = chooser.get_filename()
 
         if filename:
-            # A real media file was selected, so default to using it as the
-            # source media file for this episode.
+            # If an existing media file was selected, replace the episode media
+            # file field with a URL to the selected source file. The "replace
+            # media file" checkbox is checked by default since the assumption
+            # the user wants to replace the existing file with the new one/
             self.check_replace_media.set_active(True)
+
+            try:
+                media_uri = pathlib.Path(filename).expanduser().resolve().as_uri()
+            except Exception:
+                logger.warning('Could not convert selected media file to URI: %s', filename, exc_info=True)
+                media_uri = ''
+
+            if media_uri:
+                self.entry_media_url.set_text(media_uri)
 
             self.media_help_label.set_text(
                 _('Media file selected. Click "Read tags..." to choose which tag values to apply.')
             )
+
         else:
-            # No file was selected. This covers the initial empty state and cases
-            # where the chooser has no usable selected filename.
+            # No usable file was selected. This covers the initial empty state and cases
+            # where the user cancels/clears the chooser. The "replace media file" option
+            # is unchecked since there is no new file to replace with.
             self.check_replace_media.set_active(False)
 
             self.media_help_label.set_markup(
