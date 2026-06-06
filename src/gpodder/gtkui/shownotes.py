@@ -61,6 +61,25 @@ def get_shownotes(enable_html, pane):
     else:
         return gPodderShownotesText(pane)
 
+#RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+# Added helper functions for media URL and media file handling in episode
+# shownotes.
+def _is_file_url(url):
+    """Return True if url is a local file:// URL."""
+
+    return (url or '').strip().lower().startswith('file://')
+
+def _get_media_link_label(media_url):
+    """Return the shownotes link label for an episode media URL."""
+
+    if not media_url:
+        return ''
+
+    if _is_file_url(media_url):
+        return _('Open local media file')
+
+    return _('Stream media via URL')
+#RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
 class gPodderShownotes:
     def __init__(self, shownotes_pane):
@@ -224,6 +243,23 @@ class gPodderShownotesText(gPodderShownotes):
         if episode.link:
             hyperlinks.append((self.text_buffer.get_char_count(), None))
         self.text_buffer.insert_at_cursor('\n')
+
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Added link to episode media file if available.
+        media_url = (getattr(episode, 'url', '') or '').strip()
+        media_link_label = _get_media_link_label(media_url)
+
+        if media_url and media_link_label:
+            hyperlinks.append((self.text_buffer.get_char_count(), media_url))
+            self.text_buffer.insert_with_tags_by_name(
+                self.text_buffer.get_end_iter(),
+                media_link_label,
+                'hyperlink',
+            )
+            hyperlinks.append((self.text_buffer.get_char_count(), None))
+            self.text_buffer.insert_at_cursor('\n')
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+
         self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), subheading, 'subheading')
         self.text_buffer.insert_at_cursor('\n')
         self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), details, 'details')
@@ -353,7 +389,19 @@ class gPodderShownotesHTML(gPodderShownotes):
         stylesheet = self.get_stylesheet()
         if stylesheet:
             self.manager.add_style_sheet(stylesheet)
+
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Added link to episode media file if available.
+        media_url = (getattr(episode, 'url', '') or '').strip()
         heading = '<h3>%s</h3>' % html.escape(episode.title)
+        media_link = ''
+        if media_url:
+            media_link = '<p><a href="%s">%s</a></p>' % (
+                html.escape(media_url, quote=True),
+                html.escape(_('Open Media URL')),
+            )
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+
         subheading = _('from %s') % html.escape(episode.channel.title)
         details = '<small>%s</small>' % html.escape(self.details_fmt % {
             'date': '{} {}'.format(episode.published_formatted('%H:%M', ''),
@@ -361,8 +409,23 @@ class gPodderShownotesHTML(gPodderShownotes):
             'size': util.format_filesize(episode.file_size, digits=1)
             if episode.file_size > 0 else "-",
             'duration': episode.get_play_info_string()})
-        header_html = _('<div id="gpodder-title">\n%(heading)s\n<p>%(subheading)s</p>\n<p>%(details)s</p></div>\n') \
-            % {'heading': heading, 'subheading': subheading, 'details': details}
+
+        #RobL-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v-v
+        # Added link to episode media file if available.
+        header_html = _(
+            '<div id="gpodder-title">\n'
+            '%(heading)s\n'
+            '%(media_link)s\n'
+            '<p>%(subheading)s</p>\n'
+            '<p>%(details)s</p></div>\n'
+        ) % {
+            'heading': heading,
+            'media_link': media_link,
+            'subheading': subheading,
+            'details': details,
+        }
+        #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+
         # uncomment to prevent background override in html shownotes
         # self.manager.remove_all_style_sheets ()
         logger.debug("base uri: %s (chan:%s)", self._base_uri, episode.channel.url)

@@ -1138,6 +1138,8 @@ class PodcastListModel(Gtk.ListStore):
 
         total, deleted, new, downloaded, unplayed = channel.get_statistics()
 
+        total_avail = max(0, total - deleted)  #RobL - Total available episodes (i.e. not deleted)
+
         if isinstance(channel, PodcastChannelProxy) and not channel.ALL_EPISODES_PROXY:
             section = channel.title
 
@@ -1148,10 +1150,10 @@ class PodcastListModel(Gtk.ListStore):
 
             # Update the section header to include the total number of episodes
             # in the section.
-            if total == 1:
+            if total_avail == 1:
                 section_text = f'{section}   (1 episode)'
             else:
-                section_text = f'{section}   ({total} episodes)'
+                section_text = f'{section}   ({total_avail} episodes)'
 
             # The section header is styled based on GUITheme constants defined above.
             description = (
@@ -1159,7 +1161,7 @@ class PodcastListModel(Gtk.ListStore):
                 f'{GUITheme.PODCAST_SECTION_STYLE_BEG}{html.escape(section_text)}'
                 f'{GUITheme.PODCAST_SECTION_STYLE_END}</span>'
             )
-            #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
+            #RobL-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^-^
 
             pill_image = None
             cover_image = None
@@ -1178,10 +1180,10 @@ class PodcastListModel(Gtk.ListStore):
                 self.C_ERROR, self._format_error(channel),
                 self.C_PILL, pill_image,
                 self.C_PILL_VISIBLE, pill_image is not None,
-                self.C_VIEW_SHOW_UNDELETED, total - deleted > 0,
+                self.C_VIEW_SHOW_UNDELETED, total_avail > 0, #RobL - Use total_avail instead of (total-deleted)
                 self.C_VIEW_SHOW_DOWNLOADED, downloaded + new > 0,
                 self.C_VIEW_SHOW_UNPLAYED, unplayed + new > 0,
-                self.C_HAS_EPISODES, total > 0,
+                self.C_HAS_EPISODES, total_avail > 0,        #RobL - Use total_avail instead of total
                 self.C_DOWNLOADS, downloaded)
 
     def clear_cover_cache(self, podcast_url):

@@ -924,6 +924,8 @@ class gPodder(BuilderWidget):
 
         total, deleted, new, downloaded, unplayed = self.active_channel.get_statistics()
 
+        total = max(0, total - deleted)  #RobL - Total = available episodes (i.e. not deleted)
+
         if isinstance(self.active_channel, PodcastChannelProxy):
             if self.active_channel.ALL_EPISODES_PROXY:
                 status = N_(

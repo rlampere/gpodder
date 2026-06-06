@@ -1719,7 +1719,7 @@ class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
 
         rows = [
             (self.FIELD_TITLE, _('Title'), current_values.get('title', ''), metadata.title or '', self.CHECK_IF_VALUES_DIFFER),
-            (self.FIELD_MEDIA_URL, _('Media URL'), current_values.get('media_url', ''), metadata.url or '', self.CHECK_IF_VALUES_DIFFER),
+            (self.FIELD_MEDIA_URL, _('Media URL'), current_values.get('media_url', ''), metadata.url or '', self.CHECK_FORCE_FALSE),
             (self.FIELD_LINK, _('Episode page link'), current_values.get('link', ''), metadata.link or '', self.CHECK_IF_VALUES_DIFFER),
             (self.FIELD_DESCRIPTION, _('Description'), current_values.get('description', ''), metadata.description or '', self.CHECK_IF_VALUES_DIFFER),
             (self.FIELD_PUBLISHED, _('Published'), current_values.get('published', ''), self._format_published(metadata.published), self.CHECK_IF_VALUES_DIFFER),
@@ -3428,9 +3428,18 @@ class ManualEntryController(object):
                               media_source=None, media_url='', episode_art_url='',
                               total_time=0, replace_media=False,
                               is_new_record=False):
+        """Apply the provided data fields to the episode, handling both new
+           episode creation and existing episode update cases."""
+
         old_destination = None
         if getattr(episode, 'download_filename', None):
             old_destination = episode.local_filename(create=False, check_only=True)
+
+        old_media_url = (getattr(episode, 'url', '') or '').strip()
+        old_title = getattr(episode, 'title', '') or ''
+        old_published = getattr(episode, 'published', 0) or 0
+        old_season_num = int(getattr(episode, 'season_num', 0) or 0)
+        old_episode_num = int(getattr(episode, 'episode_num', 0) or 0)
 
         episode.title = title
 
@@ -3471,34 +3480,30 @@ class ManualEntryController(object):
         if hasattr(episode, 'episode_num'):
             episode.episode_num = int(episode_num or 0)
 
+        # Determine if any metadata fields that affect the filename have changed.
+        # If so, the existing media file may need to be renamed to match the new
+        # metadata and naming template.
+        filename_metadata_changed = (
+            old_title != (episode.title or '')
+            or old_published != (episode.published or 0)
+            or old_season_num != int(getattr(episode, 'season_num', 0) or 0)
+            or old_episode_num != int(getattr(episode, 'episode_num', 0) or 0)
+        )
+
+        # If a media  file was selected, update the episode to point to the
+        # selected file and copy the file to the episode's managed download location
+        # if it's not already there.
         if media_source is not None:
+
             source_path = str(media_source)
+            selected_file_url = media_source.as_uri()
 
-            # Define an internal helper function to check if two paths refer to
-            # the same local file, accounting for potential differences in path
-            # formatting and case sensitivity across platforms.
-            def __is_same_local_file(path_a, path_b):
-                """Return True if two paths refer to the same local file."""
+            # Only update episode.url from a selected local file when that will not
+            # overwrite a real online/feed enclosure URL.
+            if self._should_update_episode_media_url(old_media_url, selected_file_url):
+                episode.url = selected_file_url
 
-                if not path_a or not path_b:
-                    return False
-
-                try:
-                    return os.path.samefile(path_a, path_b)
-                except Exception:
-                    return os.path.normcase(os.path.abspath(str(path_a))) == \
-                        os.path.normcase(os.path.abspath(str(path_b)))
-
-            # True when the user re-selects the episode's existing managed media file.
-            # In that case, do not treat the selected file as an external replacement
-            # source to be copied over itself.
-            source_is_existing_managed_file = (
-                old_destination is not None and
-                __is_same_local_file(source_path, old_destination)
-            )
-
-            episode.url = media_source.as_uri()
-            episode.mime_type = mimetypes.guess_type(source_path)[0] or 'application/octet-stream'
+            episode.mime_type = (mimetypes.guess_type(source_path)[0] or 'application/octet-stream')
 
             try:
                 episode.file_size = media_source.stat().st_size
@@ -3507,6 +3512,16 @@ class ManualEntryController(object):
 
             os.makedirs(podcast.save_dir, exist_ok=True)
 
+            # True when the user re-selects the episode's existing managed media file.
+            # In that case, do not treat the selected file as an external replacement
+            # source to be copied over itself.
+            source_is_existing_managed_file = (
+                old_destination is not None and
+                self._is_same_local_file(source_path, old_destination)
+            )
+
+            # Determine the destination path for the episode's media file based on
+            # the naming template and metadata.
             destination = episode.local_filename(
                 create=True,
                 force_update=True,
@@ -3529,7 +3544,7 @@ class ManualEntryController(object):
             else:
                 # Normal replacement case: selected file is external to the episode's
                 # managed download location.
-                if not __is_same_local_file(destination, source_path):
+                if destination and not self._is_same_local_file(destination, source_path):
                     shutil.copy2(source_path, destination)
 
                 episode.on_downloaded(destination)
@@ -3540,37 +3555,70 @@ class ManualEntryController(object):
                 if (
                     old_destination
                     and os.path.exists(old_destination)
-                    and not __is_same_local_file(old_destination, destination)
+                    and not self._is_same_local_file(old_destination, destination)
                 ):
                     try:
                         os.remove(old_destination)
                     except OSError:
                         pass
         else:
+            # If no media source file was selected but a media URL was provided,
+            # update the episode to point to the new URL.
             if media_url:
-                episode.url = media_url
-                episode.mime_type = mimetypes.guess_type(media_url)[0] or episode.mime_type or 'application/octet-stream'
+
+                # Only update episode.url when the proposed URL is allowed to replace
+                # the current URL. This prevents selected local file:// URLs from
+                # overwriting normal http/https feed enclosure URLs.
+                if self._should_update_episode_media_url(old_media_url, media_url):
+                    episode.url = media_url
+
+                episode.mime_type = (
+                    mimetypes.guess_type(media_url)[0]
+                    or episode.mime_type
+                    or 'application/octet-stream'
+                )
                 episode.file_size = getattr(episode, 'file_size', 0) or 0
 
-                # Do not mark as downloaded if this is an online-only episode.
-                if is_new_record:
+                # Do not mark as downloaded if this is a new online-only episode.
+                if is_new_record and not self._is_file_url(media_url):
                     episode.state = gpodder.STATE_NORMAL
 
+            # If neither a media source file nor a media URL was provided, raise
+            # an error if the user intended to replace the media,
             elif replace_media:
                 raise ManualEntryError(_('A replacement media file or online media URL is required.'))
 
+            # No media replacement and no Media URL change. Filename refresh is
+            # handled below if filename-related metadata changed.
             else:
-                # Re-run naming logic if metadata changed and a managed file exists.
-                if old_destination and os.path.exists(old_destination):
-                    destination = episode.local_filename(create=True, force_update=True)
-                    if old_destination != destination and os.path.exists(old_destination):
-                        try:
-                            os.remove(old_destination)
-                        except OSError:
-                            pass
-                    episode.file_size = os.path.getsize(destination) if os.path.exists(destination) else getattr(episode, 'file_size', 0)
-                    episode.state = gpodder.STATE_DOWNLOADED
+                pass
 
+        # If filename-related metadata changed, re-run the file naming logic for
+        # the local media file. This covers changes to title, published date,
+        # season number, and episode number.
+        # IMPORTANT! Do not run this when media_source is not None because
+        # that branch already calls:
+        # local_filename(..., force_update=True, template=media_source.name).
+        if (
+            filename_metadata_changed
+            and media_source is None
+            and old_destination
+            and os.path.exists(old_destination)
+        ):
+            destination = episode.local_filename(create=True, force_update=True)
+
+            if destination and os.path.exists(destination):
+                episode.file_size = os.path.getsize(destination)
+                episode.state = gpodder.STATE_DOWNLOADED
+            else:
+                logger.warning(
+                    'Episode media filename refresh did not produce an existing destination: old=%s new=%s',
+                    old_destination,
+                    destination,
+                )
+
+        # If this is a new episode record, set the is_new flag based
+        # on the provided value.
         episode.is_new = bool(is_new)
         if not episode.is_new:
             episode.last_playback = int(time.time())
@@ -3650,6 +3698,23 @@ class ManualEntryController(object):
             return None
         return episodes[0]
 
+    def _is_file_url(self, url):
+        """Return True if url is a local file:// URL."""
+
+        return (url or '').strip().lower().startswith('file://')
+
+    def _is_same_local_file(self, path_a, path_b):
+        """Return True if two paths refer to the same local file."""
+
+        if not path_a or not path_b:
+            return False
+
+        try:
+            return os.path.samefile(path_a, path_b)
+        except Exception:
+            return os.path.normcase(os.path.abspath(str(path_a))) == \
+                os.path.normcase(os.path.abspath(str(path_b)))
+
     def _parse_published_datetime(self, text):
         text = (text or '').strip()
         if not text:
@@ -3720,6 +3785,36 @@ class ManualEntryController(object):
             skipped,
             failed,
         )
+
+    def _should_update_episode_media_url(self, old_url, new_url):
+        """Return True if episode.url should be changed.
+
+        Local file:// URLs may replace blank/file:// URLs.
+
+        Online URLs may be updated when the user actually supplies a different
+        online URL.
+
+        A selected local file should not overwrite an existing http/https feed URL.
+        """
+
+        old_url = (old_url or '').strip()
+        new_url = (new_url or '').strip()
+
+        if not new_url:
+            return False
+
+        if new_url == old_url:
+            return False
+
+        new_is_file = self._is_file_url(new_url)
+        old_is_file = self._is_file_url(old_url)
+
+        # Local-file URLs are only appropriate for manual/local episodes.
+        if new_is_file:
+            return not old_url or old_is_file
+
+        # Non-file URLs, such as http/https feed URLs, may be changed intentionally.
+        return True
 
     #---------------------------------------------------------------------------
     # Private Methods - Helper Functions for UI Refresh
