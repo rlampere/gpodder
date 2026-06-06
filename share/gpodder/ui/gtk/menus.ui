@@ -448,7 +448,7 @@
         <section>
             <item>
                 <attribute name="action">win.manualEditPodcast</attribute>
-                <attribute name="label" translatable="yes">Edit Podcast Settings...</attribute>
+                <attribute name="label" translatable="yes">Edit Podcast...</attribute>
             </item>
             <item>
                 <attribute name="action">win.manualAddEpisodeSelectedPodcast</attribute>

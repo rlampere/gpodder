@@ -1655,6 +1655,12 @@ class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
     FIELD_EPISODE_ART_URL = 'episode_art_url'
     FIELD_DURATION = 'duration'
 
+    CHECK_FORCE_TRUE = 'force_true'
+    CHECK_FORCE_FALSE = 'force_false'
+    CHECK_WHEN_ADDING = 'when_adding'
+    CHECK_WHEN_EDITING = 'when_editing'
+    CHECK_IF_VALUES_DIFFER = 'if_values_differ'
+
     def __init__(self, parent, metadata, current_values=None, is_edit=False,
              value_column_title=None, note_text=None):
         super().__init__(
@@ -1704,24 +1710,24 @@ class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
         grid_sw.add(grid)
         outer.pack_start(grid_sw, True, True, 0)
 
-        # Format the grid with 4 columns: checkbox, field name, current value, online value.
+        # Format the grid with 4 columns: field name, current value, tag/online value, checkbox.
         # Use CSS style classes to visually differentiate current vs online values.
-        grid.attach(self._make_header_label(_('Use')), 0, 0, 1, 1)
-        grid.attach(self._make_header_label(_('Field')), 1, 0, 1, 1)
-        grid.attach(self._make_header_label(_('Current value')), 2, 0, 1, 1)
-        grid.attach(self._make_header_label(value_column_title or _('Online value')),3, 0, 1, 1)
+        grid.attach(self._make_header_label(_('Field')), 0, 0, 1, 1)
+        grid.attach(self._make_header_label(_('Current value')), 1, 0, 1, 1)
+        grid.attach(self._make_header_label(value_column_title or _('Online value')), 2, 0, 1, 1)
+        grid.attach(self._make_header_label(_('Apply')), 3, 0, 1, 1)
 
         rows = [
-            (self.FIELD_TITLE, _('Title'), current_values.get('title', ''), metadata.title or '', True),
-            (self.FIELD_MEDIA_URL, _('Media URL'), current_values.get('media_url', ''), metadata.url or '', not is_edit),
-            (self.FIELD_LINK, _('Episode page link'), current_values.get('link', ''), metadata.link or '', True),
-            (self.FIELD_DESCRIPTION, _('Description'), current_values.get('description', ''), metadata.description or '', True),
-            (self.FIELD_PUBLISHED, _('Published'), current_values.get('published', ''), self._format_published(metadata.published), True),
-            (self.FIELD_SEASON, _('Season'), current_values.get('season', ''), self._value(metadata.season), True),
-            (self.FIELD_EPISODE, _('Episode #'), current_values.get('episode', ''), self._value(metadata.number), True),
-            (self.FIELD_GUID, _('GUID'), current_values.get('guid', ''), metadata.guid or '', False),
-            (self.FIELD_EPISODE_ART_URL, _('Episode Art URL'), current_values.get('episode_art_url', ''), metadata.image_url or '', True),
-            (self.FIELD_DURATION, _('Duration'), current_values.get('duration', ''), self._value(metadata.duration), True),
+            (self.FIELD_TITLE, _('Title'), current_values.get('title', ''), metadata.title or '', self.CHECK_IF_VALUES_DIFFER),
+            (self.FIELD_MEDIA_URL, _('Media URL'), current_values.get('media_url', ''), metadata.url or '', self.CHECK_IF_VALUES_DIFFER),
+            (self.FIELD_LINK, _('Episode page link'), current_values.get('link', ''), metadata.link or '', self.CHECK_IF_VALUES_DIFFER),
+            (self.FIELD_DESCRIPTION, _('Description'), current_values.get('description', ''), metadata.description or '', self.CHECK_IF_VALUES_DIFFER),
+            (self.FIELD_PUBLISHED, _('Published'), current_values.get('published', ''), self._format_published(metadata.published), self.CHECK_IF_VALUES_DIFFER),
+            (self.FIELD_SEASON, _('Season'), current_values.get('season', ''), self._value(metadata.season), self.CHECK_IF_VALUES_DIFFER),
+            (self.FIELD_EPISODE, _('Episode #'), current_values.get('episode', ''), self._value(metadata.number), self.CHECK_IF_VALUES_DIFFER),
+            (self.FIELD_GUID, _('GUID'), current_values.get('guid', ''), metadata.guid or '', self.CHECK_FORCE_FALSE),
+            (self.FIELD_EPISODE_ART_URL, _('Episode Art URL'), current_values.get('episode_art_url', ''), metadata.image_url or '', self.CHECK_IF_VALUES_DIFFER),
+            (self.FIELD_DURATION, _('Duration'), current_values.get('duration', ''), self._value(metadata.duration), self.CHECK_IF_VALUES_DIFFER),
         ]
 
         row_num = 1
@@ -1732,7 +1738,12 @@ class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
             has_online_value = bool((online_value or '').strip())
 
             checkbox = Gtk.CheckButton()
-            checkbox.set_active(default_checked and has_online_value)
+            resolved_default_checked = self._resolve_default_checked(
+                default_checked,
+                current_value,
+                online_value,
+            )
+            checkbox.set_active(resolved_default_checked and has_online_value)
             checkbox.set_sensitive(has_online_value)
             self.checkboxes[field_name] = checkbox
 
@@ -1764,20 +1775,18 @@ class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
                     'metadata-online-value',
                 )
 
-            grid.attach(checkbox, 0, row_num, 1, 1)
-            grid.attach(field_label, 1, row_num, 1, 1)
-            grid.attach(current_box, 2, row_num, 1, 1)
-            grid.attach(online_box, 3, row_num, 1, 1)
+            grid.attach(field_label, 0, row_num, 1, 1)
+            grid.attach(current_box, 1, row_num, 1, 1)
+            grid.attach(online_box, 2, row_num, 1, 1)
+            grid.attach(checkbox, 3, row_num, 1, 1)
 
             row_num += 1
 
         self.show_all()
 
-    def _value(self, value):
-        if value is None:
-            return ''
-        return str(value)
-
+    #---------------------------------------------------------------------------
+    # Private Helper Methods
+    #---------------------------------------------------------------------------
     def _format_published(self, published):
         if not published:
             return ''
@@ -1791,39 +1800,6 @@ class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
             pass
 
         return str(published)
-
-    def _shorten(self, value, max_len=180):
-        value = (value or '').strip().replace('\r', ' ').replace('\n', ' ')
-        if len(value) > max_len:
-            return value[:max_len - 3] + '...'
-        return value
-
-    def get_selected_fields(self):
-        return {
-            field_name
-            for field_name, checkbox in self.checkboxes.items()
-            if checkbox.get_active()
-        }
-
-    def _make_header_label(self, text):
-        label = Gtk.Label(label=text, xalign=0)
-        label.get_style_context().add_class('metadata-apply-header')
-        return label
-
-    def _make_value_box(self, text, css_class):
-        label = Gtk.Label(label=self._shorten(text), xalign=0)
-        label.set_line_wrap(True)
-        label.set_selectable(True)
-        label.set_tooltip_text(text or '')
-
-        # EventBox lets GTK apply a visible background around the label.
-        box = Gtk.EventBox()
-        box.set_visible_window(True)
-        box.set_hexpand(True)
-        box.get_style_context().add_class(css_class)
-        box.add(label)
-
-        return box
 
     def _make_description_box(self, text, css_class):
         text = text or ''
@@ -1852,6 +1828,83 @@ class ManualEpisodeMetadataApplyDialog(Gtk.Dialog):
         sw.get_style_context().add_class(css_class)
 
         return sw
+
+    def _make_header_label(self, text):
+        label = Gtk.Label(label=text, xalign=0)
+        label.get_style_context().add_class('metadata-apply-header')
+        return label
+
+    def _make_value_box(self, text, css_class):
+        label = Gtk.Label(label=self._shorten(text), xalign=0)
+        label.set_line_wrap(True)
+        label.set_selectable(True)
+        label.set_tooltip_text(text or '')
+
+        # EventBox lets GTK apply a visible background around the label.
+        box = Gtk.EventBox()
+        box.set_visible_window(True)
+        box.set_hexpand(True)
+        box.get_style_context().add_class(css_class)
+        box.add(label)
+
+        return box
+
+    def _resolve_default_checked(self, default_checked, current_value, online_value):
+        """Resolve a row's default checkbox rule to True or False."""
+
+        if default_checked == self.CHECK_FORCE_TRUE:
+            return True
+
+        if default_checked == self.CHECK_FORCE_FALSE:
+            return False
+
+        if default_checked == self.CHECK_WHEN_ADDING:
+            return not self.is_edit
+
+        if default_checked == self.CHECK_WHEN_EDITING:
+            return self.is_edit
+
+        if default_checked == self.CHECK_IF_VALUES_DIFFER:
+            return self._values_differ(current_value, online_value)
+
+        # Preserve support for existing plain booleans.
+        if isinstance(default_checked, bool):
+            return default_checked
+
+        logger.warning(
+            'Unknown metadata checkbox default rule %r; defaulting to unchecked',
+            default_checked,
+        )
+        return False
+
+    def _shorten(self, value, max_len=180):
+        value = (value or '').strip().replace('\r', ' ').replace('\n', ' ')
+        if len(value) > max_len:
+            return value[:max_len - 3] + '...'
+        return value
+
+    def _value(self, value):
+        if value is None:
+            return ''
+        return str(value)
+
+    def _values_differ(self, current_value, new_value):
+        """Return True if the current value differs from the proposed tag value."""
+
+        current_text = '' if current_value is None else str(current_value).strip()
+        new_text = '' if new_value is None else str(new_value).strip()
+
+        return current_text != new_text
+
+    #---------------------------------------------------------------------------
+    # Public Helper Methods
+    #---------------------------------------------------------------------------
+    def get_selected_fields(self):
+        return {
+            field_name
+            for field_name, checkbox in self.checkboxes.items()
+            if checkbox.get_active()
+        }
 
 #===============================================================================
 class ManualEpisodeDialog(Gtk.Dialog):
@@ -2228,15 +2281,7 @@ class ManualEpisodeDialog(Gtk.Dialog):
             # media file" checkbox is checked by default since the assumption
             # the user wants to replace the existing file with the new one/
             self.check_replace_media.set_active(True)
-
-            try:
-                media_uri = pathlib.Path(filename).expanduser().resolve().as_uri()
-            except Exception:
-                logger.warning('Could not convert selected media file to URI: %s', filename, exc_info=True)
-                media_uri = ''
-
-            if media_uri:
-                self.entry_media_url.set_text(media_uri)
+            self.update_media_url_from_selected_file()
 
             self.media_help_label.set_text(
                 _('Media file selected. Click "Read tags..." to choose which tag values to apply.')
@@ -2249,7 +2294,8 @@ class ManualEpisodeDialog(Gtk.Dialog):
             self.check_replace_media.set_active(False)
 
             self.media_help_label.set_markup(
-                _('<i>Select a media file first so the title, description, and published date fields can be populated.</i>')
+                _('<i>Select a media file first so the title, description, '
+                  'and published date fields can be populated.</i>')
             )
 
         self.update_embedded_cover_preview()
@@ -2257,10 +2303,14 @@ class ManualEpisodeDialog(Gtk.Dialog):
     def on_read_media_tags_clicked(self, button):
         """Read metadata tags from the selected media file and choose which fields
            to copy into the episode dialog."""
+
         filename = self._get_media_file_for_tag_reading()
-        logger.info('Reading media tags from: %s', filename)
 
         if not filename:
+            self.media_help_label.set_markup(
+                _('<i>Select a media file first so the title, description, '
+                  'and published date fields can be populated.</i>')
+            )
             self._show_error(
                 _('No media file available'),
                 _(
@@ -2269,6 +2319,11 @@ class ManualEpisodeDialog(Gtk.Dialog):
                 )
             )
             return
+
+        # Update the main dialog Media URL from the exact file being read.
+        media_uri = self.update_media_url_from_filename(filename)
+
+        logger.info('Reading media tags from: %s', filename)
 
         try:
             tag_data = _extract_media_metadata(filename)
@@ -2281,6 +2336,13 @@ class ManualEpisodeDialog(Gtk.Dialog):
             return
 
         metadata = _media_metadata_to_episode_metadata(tag_data)
+
+        # Media tags generally do not contain a usable enclosure URL.
+        # Use the selected/read local filename as the Media URL value shown
+        # in the apply-metadata dialog.
+        if media_uri:
+            metadata.url = media_uri
+
         self.update_embedded_cover_preview()
         self.choose_and_apply_media_tag_metadata(metadata)
 
@@ -2460,6 +2522,30 @@ class ManualEpisodeDialog(Gtk.Dialog):
             logger.warning('Could not preview embedded cover art from %s', filename, exc_info=True)
             self.embedded_cover_image.clear()
             self.embedded_cover_status_label.set_text(_('Embedded Cover Art\n(Could not preview embedded cover art.)'))
+
+    def update_media_url_from_filename(self, filename):
+        """Update the Media URL field from a local media filename."""
+
+        if not filename:
+            return ''
+
+        try:
+            media_uri = pathlib.Path(filename).expanduser().resolve().as_uri()
+        except Exception:
+            logger.warning(
+                'Could not convert media file to URI: %s',
+                filename,
+                exc_info=True,
+            )
+            return ''
+
+        self.entry_media_url.set_text(media_uri)
+        return media_uri
+
+    def update_media_url_from_selected_file(self):
+        """Update the Media URL field from the currently selected media file."""
+
+        return self.update_media_url_from_filename(self.file_media.get_filename())
 
     #---------------------------------------------------------------------------
     # Private Methods
@@ -3386,19 +3472,80 @@ class ManualEntryController(object):
             episode.episode_num = int(episode_num or 0)
 
         if media_source is not None:
-            episode.url = media_source.as_uri()
-            episode.mime_type = mimetypes.guess_type(str(media_source))[0] or 'application/octet-stream'
-            episode.file_size = media_source.stat().st_size
-            destination = episode.local_filename(create=True, force_update=True, template=media_source.name)
-            os.makedirs(podcast.save_dir, exist_ok=True)
-            if os.path.abspath(destination) != os.path.abspath(str(media_source)):
-                shutil.copy2(str(media_source), destination)
-            episode.on_downloaded(destination)
-            if old_destination and os.path.exists(old_destination) and os.path.abspath(old_destination) != os.path.abspath(destination):
+            source_path = str(media_source)
+
+            # Define an internal helper function to check if two paths refer to
+            # the same local file, accounting for potential differences in path
+            # formatting and case sensitivity across platforms.
+            def __is_same_local_file(path_a, path_b):
+                """Return True if two paths refer to the same local file."""
+
+                if not path_a or not path_b:
+                    return False
+
                 try:
-                    os.remove(old_destination)
-                except OSError:
-                    pass
+                    return os.path.samefile(path_a, path_b)
+                except Exception:
+                    return os.path.normcase(os.path.abspath(str(path_a))) == \
+                        os.path.normcase(os.path.abspath(str(path_b)))
+
+            # True when the user re-selects the episode's existing managed media file.
+            # In that case, do not treat the selected file as an external replacement
+            # source to be copied over itself.
+            source_is_existing_managed_file = (
+                old_destination is not None and
+                __is_same_local_file(source_path, old_destination)
+            )
+
+            episode.url = media_source.as_uri()
+            episode.mime_type = mimetypes.guess_type(source_path)[0] or 'application/octet-stream'
+
+            try:
+                episode.file_size = media_source.stat().st_size
+            except OSError:
+                episode.file_size = getattr(episode, 'file_size', 0) or 0
+
+            os.makedirs(podcast.save_dir, exist_ok=True)
+
+            destination = episode.local_filename(
+                create=True,
+                force_update=True,
+                template=media_source.name,
+            )
+
+            #logger.warning('Old media file: %s', destination)
+            #logger.warning('New media file: %s', source_path)
+
+            if source_is_existing_managed_file:
+                # Selected source file is already the episode's local media file.
+                # local_filename(force_update=True) may have renamed it, so do not copy
+                # from source_path afterward. Just refresh the episode's downloaded state.
+                if destination and os.path.exists(destination):
+                    episode.file_size = os.path.getsize(destination)
+
+                episode.on_downloaded(destination)
+                #logger.warning('New media file is the same as the existing file: %s', source_path)
+
+            else:
+                # Normal replacement case: selected file is external to the episode's
+                # managed download location.
+                if not __is_same_local_file(destination, source_path):
+                    shutil.copy2(source_path, destination)
+
+                episode.on_downloaded(destination)
+
+                # If the episode had an existing managed media file that is different
+                # from the newly selected file, remove the old file to avoid leaving
+                # orphaned files around.
+                if (
+                    old_destination
+                    and os.path.exists(old_destination)
+                    and not __is_same_local_file(old_destination, destination)
+                ):
+                    try:
+                        os.remove(old_destination)
+                    except OSError:
+                        pass
         else:
             if media_url:
                 episode.url = media_url
